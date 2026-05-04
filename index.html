@@ -767,6 +767,24 @@
     color: #A0E0A0;
     margin-top: 6px;
   }
+
+  .gm-script-box {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(201,168,76,0.2);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--pale);
+    white-space: pre-wrap;
+    font-style: italic;
+  }
+
+  .gm-script-box em, .gm-script-box [data-note] {
+    color: var(--gold);
+    font-style: normal;
+    font-size: 13px;
+  }
 </style>
 </head>
 <body>
@@ -842,6 +860,13 @@
         <span class="badge badge-gold">Vote Shield</span>
       </div>
 
+      <!-- Seer result -->
+      <div id="playerSeerResult" style="display:none">
+        <hr class="divider">
+        <h3>🔮 Vision</h3>
+        <div id="playerSeerResultContent"></div>
+      </div>
+
       <!-- Action area -->
       <div id="playerActionArea" style="display:none">
         <hr class="divider">
@@ -901,6 +926,11 @@
     <!-- GM: Town Hall Tab -->
     <div class="gm-panel" id="panel-vote">
       <div class="card">
+        <h2>📜 GM Script</h2>
+        <p class="text-mist text-small" style="margin-bottom:10px">Read this aloud to open Town Hall. Generated from night actions.</p>
+        <div id="gm-script-box" class="gm-script-box">No script yet — call Town Hall from the Players tab to generate.</div>
+      </div>
+      <div class="card">
         <h2>Town Hall</h2>
         <div id="ghost-vote-result" class="info-box blue" style="display:none"></div>
         <div id="gm-vote-list"></div>
@@ -948,7 +978,7 @@
 // Create a Realtime Database and set rules to allow read/write
 // (lock down for production use).
 
-const FIREBASE_URL = "https://all-night-werewolf-default-rtdb.europe-west1.firebasedatabase.app/"; // <-- REPLACE
+const FIREBASE_URL = "https://all-night-werewolf-default-rtdb.europe-west1.firebasedatabase.app"; // <-- REPLACE
 const FIREBASE_API_KEY = ""; // Not needed for Realtime DB REST with open rules
 
 // ============================================================
@@ -1337,13 +1367,13 @@ function renderPlayer(game) {
   const statusBox = document.getElementById('player-status-box');
   if (game.phase === 'night') {
     banner.className = 'phase-banner phase-night';
-    banner.textContent = '🌙 Night is active — mingle, scheme, act…';
+    banner.textContent = `🌙 Night ${game.round} — mingle, scheme, act…`;
     statusBox.textContent = me.eliminated
       ? 'You are a ghost. Haunt wisely.'
       : (me.actionSubmitted ? 'Your action has been submitted. Mingle.' : 'Submit your nightly action below if you have one.');
   } else if (game.phase === 'townhall') {
     banner.className = 'phase-banner phase-townhall';
-    banner.textContent = '🕯️ Town Hall — gather and vote';
+    banner.textContent = `🕯️ Town Hall — after Night ${game.round}`;
     statusBox.textContent = me.eliminated
       ? 'Ghost: your vote has been noted by the GM.'
       : 'Discuss, debate, then cast your vote with the Game Master.';
@@ -1389,6 +1419,24 @@ function renderPlayer(game) {
     return;
   } else {
     ghostArea.style.display = 'none';
+  }
+
+  // Seer result — shown at Town Hall
+  const seerResultArea = document.getElementById('playerSeerResult');
+  const seerResultContent = document.getElementById('playerSeerResultContent');
+  if (me.role === 'seer' && game.phase === 'townhall' && me.seerResult) {
+    seerResultArea.style.display = 'block';
+    const r = me.seerResult;
+    const isWolf = r.alignment === 'wolf';
+    seerResultArea.innerHTML = `
+      <hr class="divider">
+      <h3>🔮 Vision — Night ${r.round}</h3>
+      <div class="info-box ${isWolf ? 'warning' : 'success'}">
+        You inspected <strong>${r.targetName}</strong>.<br>
+        They are ${isWolf ? '🐺 a <strong>Werewolf</strong>' : '✅ a <strong>Villager</strong> (or not a wolf)'}.
+      </div>`;
+  } else if (me.role === 'seer') {
+    seerResultArea.style.display = 'none';
   }
 
   // Action area
@@ -1577,18 +1625,18 @@ document.addEventListener('visibilitychange', () => {
 // ============================================================
 
 function renderGm(game) {
-  updateGmPhaseBanner(game.phase);
+  updateGmPhaseBanner(game.phase, game.round);
   renderGmPlayerList(game);
   renderGmPhaseControls(game);
   renderGmActionInbox(game);
   renderGmVoting(game);
 }
 
-function updateGmPhaseBanner(phase) {
+function updateGmPhaseBanner(phase, round) {
   const b = document.getElementById('gm-phase-banner');
   if (phase === 'lobby') { b.className='phase-banner phase-lobby'; b.textContent='⏳ Lobby'; }
-  else if (phase === 'night') { b.className='phase-banner phase-night'; b.textContent='🌙 Night Phase Active'; }
-  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent='🕯️ Town Hall'; }
+  else if (phase === 'night') { b.className='phase-banner phase-night'; b.textContent=`🌙 Night ${round||''} Active`; }
+  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent=`🕯️ Town Hall — after Night ${round||''}`; }
   else if (phase === 'ended') { b.className='phase-banner phase-lobby'; b.textContent='🏁 Game Over'; }
 }
 
@@ -1763,6 +1811,17 @@ function renderGmVoting(game) {
   const voteList = document.getElementById('gm-vote-list');
   const controls = document.getElementById('gm-vote-controls');
   const ghostResult = document.getElementById('ghost-vote-result');
+  const scriptBox = document.getElementById('gm-script-box');
+
+  // Script
+  if (game.gmScript) {
+    // Colour [NOTE/ACTION/REMINDER] lines differently
+    const formatted = game.gmScript.replace(
+      /(\[.*?\])/g,
+      '<span style="color:var(--gold);font-style:normal;font-size:13px">$1</span>'
+    );
+    scriptBox.innerHTML = formatted;
+  }
 
   if (game.phase !== 'townhall') {
     voteList.innerHTML = '<p class="text-mist text-small">Town Hall is not active.</p>';
@@ -1905,11 +1964,12 @@ window.advanceToNight = async function() {
   const newRound = (game.round || 0) + 1;
 
   // Reset action submissions for living players with actions
-  const updates = { phase: 'night', round: newRound, votes: {}, ghostVotes: {}, bardDoubled: null };
+  const updates = { phase: 'night', round: newRound, votes: {}, ghostVotes: {}, bardDoubled: null, gmScript: null };
   const players = getPlayerList(game);
   players.forEach(p => {
     if (!p.eliminated) {
       updates[`players/${p.id}/actionSubmitted`] = false;
+      updates[`players/${p.id}/seerResult`] = null; // clear last vision
     }
   });
 
@@ -1918,9 +1978,160 @@ window.advanceToNight = async function() {
 };
 
 window.advanceToTownHall = async function() {
-  await fbUpdate(`games/${state.roomCode}`, { phase: 'townhall', votes: {} });
+  const game = await fbGet(`games/${state.roomCode}`);
+  const actions = game.actions ? Object.entries(game.actions).map(([id,a])=>({id,...a})) : [];
+  const thisRound = actions.filter(a => a.round === game.round);
+  const players = getPlayerList(game);
+
+  const updates = { phase: 'townhall', votes: {} };
+
+  // --- Resolve Seer inspections: write result to their player record ---
+  const inspectActions = thisRound.filter(a => a.type === 'inspect');
+  const distractActions = thisRound.filter(a => a.type === 'distract');
+
+  inspectActions.forEach(a => {
+    // Check if Seer was distracted
+    const wasDistracted = distractActions.some(d => d.targetId === a.fromId);
+    if (wasDistracted) return; // Seer gets nothing
+
+    const target = players.find(p => p.id === a.targetId);
+    if (!target) return;
+    const alignment = ROLES[target.role]?.team === 'wolf' ? 'wolf' : 'village';
+    updates[`players/${a.fromId}/seerResult`] = {
+      targetId: a.targetId,
+      targetName: a.targetName,
+      alignment,
+      round: game.round
+    };
+  });
+
+  // --- Generate GM announcement script ---
+  const script = generateGmScript(game, thisRound, players);
+  updates.gmScript = script;
+
+  await fbUpdate(`games/${state.roomCode}`, updates);
   toast('Town Hall called 🕯️');
 };
+
+function generateGmScript(game, actions, players) {
+  // Resolve what actually happened this night
+  const distract = actions.find(a => a.type === 'distract');
+  const protect = actions.find(a => a.type === 'protect');
+  const heal = actions.find(a => a.type === 'heal');   // witch heal
+  const poison = actions.find(a => a.type === 'poison'); // witch poison
+  const killAction = actions.find(a => a.type === 'kill');
+  const shoot = actions.find(a => a.type === 'shoot');
+  const bond = actions.find(a => a.type === 'bond');
+
+  // Was the killer distracted?
+  const killerDistracted = killAction && distract && distract.targetId === killAction.fromId;
+
+  // Determine kill target (after distract/protect/heal)
+  let killed = null; // player who actually dies from wolf kill
+  let savedMessage = null;
+
+  if (killAction && !killerDistracted) {
+    const target = players.find(p => p.id === killAction.targetId);
+    if (target) {
+      const isProtected = protect && protect.targetId === killAction.targetId;
+      const isHealed = heal && heal.targetId === killAction.targetId;
+      const isTank = target.role === 'tank';
+      const isWounded = target.wounded;
+
+      if (isProtected || isHealed) {
+        savedMessage = `The Doctor watched over ${target.name} last night — the attack came, but ${target.name} was saved.`;
+      } else if (isTank && !isWounded) {
+        savedMessage = `${target.name} was attacked in the night — but they survived. They are wounded and will not survive another attack.`;
+        // GM should mark as wounded — remind them
+      } else {
+        killed = target;
+      }
+    }
+  }
+
+  // Witch poison — always kills unless also protected (edge case)
+  let poisoned = null;
+  if (poison) {
+    const target = players.find(p => p.id === poison.targetId);
+    if (target) {
+      const isProtected = protect && protect.targetId === poison.targetId;
+      if (!isProtected) poisoned = target;
+    }
+  }
+
+  // Hunter shot
+  let shot = null;
+  if (shoot) {
+    const target = players.find(p => p.id === shoot.targetId);
+    if (target) shot = target;
+  }
+
+  // Symbiote bond formed this night
+  let bondFormed = null;
+  if (bond) bondFormed = bond;
+
+  // --- Build the script ---
+  const lines = [];
+  lines.push(`"Gather round, villagers. The sun has risen on Night ${game.round}."`);
+  lines.push('');
+
+  // Deaths
+  const deaths = [];
+  if (killed) deaths.push(killed.name);
+  if (poisoned && poisoned.name !== killed?.name) deaths.push(poisoned.name);
+  if (shot) deaths.push(shot.name);
+
+  // Remove duplicates
+  const uniqueDeaths = [...new Set(deaths)];
+
+  if (uniqueDeaths.length === 0 && !savedMessage) {
+    lines.push('"The village woke peacefully. Nobody was killed last night."');
+  } else {
+    if (savedMessage) {
+      lines.push(`"${savedMessage}"`);
+    }
+    if (uniqueDeaths.length === 1) {
+      lines.push(`"Tragically, we found ${uniqueDeaths[0]} this morning. They did not survive the night."`);
+      // Reveal role
+      const deadP = players.find(p => p.name === uniqueDeaths[0]);
+      if (deadP) lines.push(`[Reveal ${uniqueDeaths[0]}'s role: ${ROLES[deadP.role]?.name || deadP.role}]`);
+    } else if (uniqueDeaths.length > 1) {
+      lines.push(`"A grim morning. We found ${uniqueDeaths.slice(0,-1).join(', ')} and ${uniqueDeaths.slice(-1)[0]} dead."`);
+      uniqueDeaths.forEach(name => {
+        const deadP = players.find(p => p.name === name);
+        if (deadP) lines.push(`[Reveal ${name}'s role: ${ROLES[deadP.role]?.name || deadP.role}]`);
+      });
+    }
+  }
+
+  // Tank wounded reminder
+  if (killAction && !killerDistracted) {
+    const t = players.find(p => p.id === killAction.targetId);
+    if (t?.role === 'tank' && !t?.wounded) {
+      lines.push('');
+      lines.push(`[ACTION REQUIRED: Mark ${t.name} as Wounded in the Players tab]`);
+      lines.push(`"${t.name} looks pale this morning — but they are still standing. For now."`);
+    }
+  }
+
+  // Symbiote bond
+  if (bondFormed) {
+    lines.push('');
+    lines.push(`[NOTE: Symbiote bond formed between ${bondFormed.fromName} and ${bondFormed.targetName}. If either dies, eliminate both.]`);
+  }
+
+  // Jester check
+  const jester = players.find(p => p.role === 'jester' && !p.eliminated);
+  if (jester) {
+    lines.push('');
+    lines.push(`[REMINDER: ${jester.name} is the Jester — they win if voted out at Town Hall. Don't reveal this.]`);
+  }
+
+  lines.push('');
+  lines.push('"Now — who do you suspect? The floor is open."');
+
+  return lines.join('\n');
+}
 
 window.endGame = async function() {
   if (!confirm('End the game?')) return;
