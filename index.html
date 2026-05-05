@@ -615,15 +615,6 @@
     color: var(--moon);
   }
 
-  .inspiration-star {
-    display: inline-block;
-    color: var(--gold);
-    font-size: 18px;
-    cursor: pointer;
-    padding: 4px;
-    -webkit-tap-highlight-color: transparent;
-  }
-
   .toast {
     position: fixed;
     bottom: 24px;
@@ -854,12 +845,6 @@
         <div id="wolfPartnersList"></div>
       </div>
 
-      <!-- Inspiration indicator -->
-      <div class="flex-between mt-8" id="inspirationRow" style="display:none">
-        <span class="text-gold">✦ You have Inspiration</span>
-        <span class="badge badge-gold">Vote Shield</span>
-      </div>
-
       <!-- Seer result -->
       <div id="playerSeerResult" style="display:none">
         <hr class="divider">
@@ -978,7 +963,7 @@
 // Create a Realtime Database and set rules to allow read/write
 // (lock down for production use).
 
-const FIREBASE_URL = "https://all-night-werewolf-default-rtdb.europe-west1.firebasedatabase.app"; // <-- REPLACE
+const FIREBASE_URL = "https://all-night-werewolf-default-rtdb.europe-west1.firebasedatabase.app";
 const FIREBASE_API_KEY = ""; // Not needed for Realtime DB REST with open rules
 
 // ============================================================
@@ -1346,6 +1331,26 @@ function renderPlayer(game) {
   const me = game.players?.[state.playerId];
   if (!me) return;
 
+  // Game over
+  if (game.phase === 'ended') {
+    showScreen('player-role');
+    const banner = document.getElementById('player-phase-banner');
+    const statusBox = document.getElementById('player-status-box');
+    banner.className = 'phase-banner phase-lobby';
+    banner.textContent = '🏁 The game is over';
+    if (game.winner === 'village') {
+      statusBox.innerHTML = '🎉 <strong>The Villagers win!</strong> All werewolves have been eliminated.';
+    } else if (game.winner === 'wolf') {
+      statusBox.innerHTML = '🐺 <strong>The Werewolves win!</strong> They have taken the village.';
+    } else {
+      statusBox.textContent = 'The game has ended.';
+    }
+    document.getElementById('playerActionArea').style.display = 'none';
+    document.getElementById('playerGhostArea').style.display = 'none';
+    document.getElementById('playerSeerResult').style.display = 'none';
+    return;
+  }
+
   // Lobby phase
   if (game.phase === 'lobby') {
     showScreen('player-lobby');
@@ -1405,10 +1410,6 @@ function renderPlayer(game) {
       wolfBox.style.display = 'block';
     }
   }
-
-  // Inspiration
-  const inspRow = document.getElementById('inspirationRow');
-  inspRow.style.display = me.inspiration ? 'flex' : 'none';
 
   // Ghost
   const ghostArea = document.getElementById('playerGhostArea');
@@ -1626,6 +1627,17 @@ document.addEventListener('visibilitychange', () => {
 
 function renderGm(game) {
   updateGmPhaseBanner(game.phase, game.round);
+
+  if (game.phase === 'ended') {
+    const banner = document.getElementById('gm-phase-banner');
+    if (game.winner === 'village') {
+      banner.textContent = '🎉 Villagers Win!';
+      banner.className = 'phase-banner phase-night';
+    } else if (game.winner === 'wolf') {
+      banner.textContent = '🐺 Werewolves Win!';
+      banner.className = 'phase-banner phase-townhall';
+    }
+  }
   renderGmPlayerList(game);
   renderGmPhaseControls(game);
   renderGmActionInbox(game);
@@ -1656,13 +1668,9 @@ function renderGmPlayerList(game) {
       <div class="top-row">
         <span class="player-name" style="font-size:16px">${p.name}${isGhost?' 👻':''}${p.wounded?' 🩹':''}</span>
         ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
-        ${p.inspiration ? '<span class="inspiration-star">✦</span>' : ''}
       </div>
       <div class="player-actions-row">
         ${game.phase !== 'lobby' ? `
-          <button class="btn btn-sm btn-secondary" onclick="toggleInspiration('${p.id}',${!p.inspiration})">
-            ${p.inspiration ? '✦ Remove Insp.' : '✦ Give Insp.'}
-          </button>
           ${!isGhost
             ? `<button class="btn btn-sm btn-danger" onclick="eliminatePlayer('${p.id}')">Eliminate</button>`
             : ''}
@@ -1860,7 +1868,7 @@ function renderGmVoting(game) {
     const effectiveVotes = isDoubled ? v * 2 : v;
     const pct = totalVotes > 0 ? Math.min(100, Math.round(effectiveVotes / totalVotes * 100)) : 0;
     html += `<div class="player-row">
-      <span class="player-name">${p.name}${p.inspiration ? ' <span class="text-gold" style="font-size:13px">✦</span>' : ''}${isDoubled ? ' <span class="badge badge-gold" style="font-size:9px">×2</span>' : ''}</span>
+      <span class="player-name">${p.name}${isDoubled ? ' <span class="badge badge-gold" style="font-size:9px">×2</span>' : ''}</span>
       <div class="flex-between" style="gap:8px">
         <button class="count-btn" onclick="adjustVote('${p.id}',-1)">−</button>
         <span class="count-val">${v}${isDoubled && v>0 ? `<span style="font-size:12px;color:var(--gold)"> (${effectiveVotes})</span>` : ''}</span>
@@ -1886,8 +1894,7 @@ function renderGmVoting(game) {
   if (leaders.length === 1) {
     const target = leaders[0];
     ctrlHtml = `
-      <div class="info-box warning">☠️ <strong>${target.name}</strong> leads with ${target.effectiveVotes} vote(s).
-        ${target.inspiration ? ' They have Inspiration — they may negate these votes.' : ''}</div>
+      <div class="info-box warning">☠️ <strong>${target.name}</strong> leads with ${target.effectiveVotes} vote(s).</div>
       <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${target.name}</button>
     `;
   } else if (leaders.length > 1) {
@@ -1920,11 +1927,11 @@ window.eliminatePlayer = async function(playerId) {
   const player = game.players?.[playerId];
   if (!player) return;
 
-  // Symbiote check
   const updates = {};
   updates[`players/${playerId}/eliminated`] = true;
   updates[`players/${playerId}/actionSubmitted`] = false;
 
+  // Symbiote — if bonded partner exists, eliminate them too
   if (game.symbiote) {
     const { aId, bId } = game.symbiote;
     if (playerId === aId) updates[`players/${bId}/eliminated`] = true;
@@ -1933,30 +1940,22 @@ window.eliminatePlayer = async function(playerId) {
 
   await fbUpdate(`games/${state.roomCode}`, updates);
   toast(`${player.name} eliminated`);
-  checkWinCondition(game);
+
+  // Re-fetch to get updated state for win check
+  const updated = await fbGet(`games/${state.roomCode}`);
+  const allPlayers = getPlayerList(updated);
+  const result = checkWinCondition(allPlayers);
+  if (result === 'village') {
+    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'village' });
+  } else if (result === 'wolf') {
+    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'wolf' });
+  }
 };
 
 window.eliminatePlayerVote = async function(playerId) {
-  const game = await fbGet(`games/${state.roomCode}`);
-  const player = game.players?.[playerId];
-  if (!player) return;
-
-  if (player.inspiration) {
-    // Inspiration negates the vote
-    await fbUpdate(`games/${state.roomCode}/players/${playerId}`, { inspiration: false });
-    toast(`${player.name} used Inspiration to negate the vote! Votes cleared.`);
-    await fbSet(`games/${state.roomCode}/votes`, {});
-    return;
-  }
-
   await eliminatePlayer(playerId);
   await fbSet(`games/${state.roomCode}/votes`, {});
   await fbSet(`games/${state.roomCode}/ghostVotes`, {});
-};
-
-window.toggleInspiration = async function(playerId, val) {
-  await fbUpdate(`games/${state.roomCode}/players/${playerId}`, { inspiration: val });
-  toast(val ? 'Inspiration awarded ✦' : 'Inspiration removed');
 };
 
 window.advanceToNight = async function() {
@@ -1985,15 +1984,12 @@ window.advanceToTownHall = async function() {
 
   const updates = { phase: 'townhall', votes: {} };
 
-  // --- Resolve Seer inspections: write result to their player record ---
+  // --- Resolve Seer inspections ---
   const inspectActions = thisRound.filter(a => a.type === 'inspect');
   const distractActions = thisRound.filter(a => a.type === 'distract');
-
   inspectActions.forEach(a => {
-    // Check if Seer was distracted
     const wasDistracted = distractActions.some(d => d.targetId === a.fromId);
-    if (wasDistracted) return; // Seer gets nothing
-
+    if (wasDistracted) return;
     const target = players.find(p => p.id === a.targetId);
     if (!target) return;
     const alignment = ROLES[target.role]?.team === 'wolf' ? 'wolf' : 'village';
@@ -2005,11 +2001,78 @@ window.advanceToTownHall = async function() {
     };
   });
 
-  // --- Generate GM announcement script ---
+  // --- Resolve night kills and apply to player records ---
+  const killAction = thisRound.find(a => a.type === 'kill');
+  const protect = thisRound.find(a => a.type === 'protect');
+  const heal = thisRound.find(a => a.type === 'heal');
+  const poison = thisRound.find(a => a.type === 'poison');
+  const shoot = thisRound.find(a => a.type === 'shoot');
+  const killerDistracted = killAction && distractActions.some(d => d.targetId === killAction.fromId);
+
+  // Wolf kill
+  if (killAction && !killerDistracted) {
+    const target = players.find(p => p.id === killAction.targetId);
+    if (target) {
+      const isProtected = protect && protect.targetId === killAction.targetId;
+      const isHealed = heal && heal.targetId === killAction.targetId;
+      const isTank = target.role === 'tank';
+      const isWounded = target.wounded;
+      if (!isProtected && !isHealed) {
+        if (isTank && !isWounded) {
+          updates[`players/${target.id}/wounded`] = true; // first hit
+        } else {
+          updates[`players/${target.id}/eliminated`] = true;
+          updates[`players/${target.id}/actionSubmitted`] = false;
+        }
+      }
+    }
+  }
+
+  // Witch poison
+  if (poison) {
+    const target = players.find(p => p.id === poison.targetId);
+    if (target) {
+      const isProtected = protect && protect.targetId === poison.targetId;
+      if (!isProtected) {
+        updates[`players/${target.id}/eliminated`] = true;
+        updates[`players/${target.id}/actionSubmitted`] = false;
+      }
+    }
+  }
+
+  // Hunter shot
+  if (shoot) {
+    const target = players.find(p => p.id === shoot.targetId);
+    if (target) {
+      updates[`players/${target.id}/eliminated`] = true;
+      updates[`players/${target.id}/actionSubmitted`] = false;
+      updates[`players/${shoot.fromId}/actionUsed`] = true;
+    }
+  }
+
+  // Symbiote cascade: if any eliminated player has a bond partner, eliminate them too
+  if (game.symbiote) {
+    const { aId, bId } = game.symbiote;
+    if (updates[`players/${aId}/eliminated`]) updates[`players/${bId}/eliminated`] = true;
+    if (updates[`players/${bId}/eliminated`]) updates[`players/${aId}/eliminated`] = true;
+  }
+
+  // --- Generate GM script (using pre-kill player state so we can describe what happened) ---
   const script = generateGmScript(game, thisRound, players);
   updates.gmScript = script;
 
   await fbUpdate(`games/${state.roomCode}`, updates);
+
+  // --- Check win condition after kills are applied ---
+  const updated = await fbGet(`games/${state.roomCode}`);
+  const allPlayers = getPlayerList(updated);
+  const result = checkWinCondition(allPlayers);
+  if (result === 'village') {
+    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'village' });
+  } else if (result === 'wolf') {
+    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'wolf' });
+  }
+
   toast('Town Hall called 🕯️');
 };
 
@@ -2138,13 +2201,14 @@ window.endGame = async function() {
   await fbUpdate(`games/${state.roomCode}`, { phase: 'ended' });
 };
 
-function checkWinCondition(game) {
-  const players = getLivingPlayers(game);
-  const wolves = players.filter(p => p.role === 'werewolf');
-  const villagers = players.filter(p => ROLES[p.role]?.team === 'village');
+function checkWinCondition(players) {
+  const living = players.filter(p => !p.eliminated);
+  const wolves = living.filter(p => p.role === 'werewolf');
+  const villagers = living.filter(p => ROLES[p.role]?.team !== 'wolf');
 
-  if (wolves.length === 0) toast('🎉 Villagers win! All werewolves eliminated.', 6000);
-  else if (wolves.length >= villagers.length) toast('🐺 Werewolves win!', 6000);
+  if (wolves.length === 0) return 'village';
+  if (wolves.length >= villagers.length && living.length <= 5) return 'wolf';
+  return null;
 }
 
 // ============================================================
