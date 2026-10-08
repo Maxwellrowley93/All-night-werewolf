@@ -1040,7 +1040,7 @@ const ROLES = {
   werewolf: {
     name: 'Werewolf', team: 'wolf', emoji: '🐺',
     desc: 'The cunning and bloodthirsty Werewolf.',
-    ability: 'Each night, coordinate with your pack and pick a victim on your phone. If the pack disagrees, the most-picked player is attacked.',
+    ability: 'Each night, every werewolf makes their own kill. Team up on one target to get past a Doctor, a healing potion or a Tank.',
     hasAction: true, actionType: 'kill',
     cssClass: 'role-werewolf'
   },
@@ -1061,14 +1061,14 @@ const ROLES = {
   doctor: {
     name: 'Doctor', team: 'village', emoji: '⚕️',
     desc: 'A skilled healer devoted to protecting the innocent.',
-    ability: 'Each night, choose one player (or yourself) to protect. They cannot be killed by the wolves or poisoned that night.',
+    ability: 'Each night, protect one player (or yourself). Your protection cancels one attack on them — a wolf kill or poison. Two wolves on the same target will still get through.',
     hasAction: true, actionType: 'protect',
     cssClass: 'role-doctor'
   },
   witch: {
     name: 'Witch', team: 'village', emoji: '🧙',
     desc: 'A mysterious figure with ancient knowledge of potions.',
-    ability: 'You have two one-use potions: a Healing Potion (if the wolves attack that player tonight, they survive) and a Poison Potion (eliminate any player). One potion per night.',
+    ability: 'You have two one-use potions: a Healing Potion (cancels one wolf attack on that player tonight) and a Poison Potion (eliminate any player). One potion per night.',
     hasAction: true, actionType: 'potion',
     cssClass: 'role-witch'
   },
@@ -1131,7 +1131,7 @@ const ROLES = {
   tank: {
     name: 'Tank', team: 'village', emoji: '🛡️',
     desc: 'You can take a hit.',
-    ability: 'It takes two night attacks to kill you. The first leaves you wounded (announced at Town Hall); the second kills you. A Town Hall vote still eliminates you outright.',
+    ability: 'It takes two night attacks to kill you — on the same night or across nights. The first leaves you wounded (announced at Town Hall); the second kills you. A Town Hall vote still eliminates you outright.',
     hasAction: false,
     cssClass: 'role-tank'
   },
@@ -1571,7 +1571,7 @@ function renderPlayerAction(game, me) {
 
   switch (me.role) {
     case 'werewolf':
-      html = prompt('Coordinate with your pack. Choose your victim:') + buildTargetGrid(others, 'kill');
+      html = prompt('Choose your victim — every wolf makes their own kill. Team up on one target to get past a Doctor or a Tank:') + buildTargetGrid(others, 'kill');
       break;
     case 'seer':
       html = prompt('Choose a player to inspect — the answer appears here when the night ends:') + buildTargetGrid(others, 'inspect');
@@ -1644,7 +1644,7 @@ function buildWitchUI(me, others, self) {
   const canPoison = me.witchPoison !== false;
   let html = '';
   if (canHeal) {
-    html += `<div class="info-box">🧪 Healing Potion — if the wolves attack this player tonight, they survive:</div>`;
+    html += `<div class="info-box">🧪 Healing Potion — cancels one wolf attack on this player tonight:</div>`;
     html += buildTargetGrid([...others, self], 'heal');
   }
   if (canHeal && canPoison) html += `<div class="separator">— or —</div>`;
@@ -1811,10 +1811,14 @@ function resolveNight(game, roundActions, players) {
     gmNotes.push(`[NOTE: Symbiote bond formed between ${a.fromName} and ${a.targetName}. Keep it secret — the app links their fates.]`);
   });
 
-  // 4. Protection and potions
-  const protectedIds = new Set(active('protect').map(a => a.targetId));
-  const healedIds = new Set(active('heal').map(a => a.targetId));
-  active('heal').forEach(a => { updates[`players/${a.fromId}/witchHeal`] = false; });
+  // 4. Protection and potions — each one cancels a single attack on its target
+  const shields = {};
+  const shieldFor = id => (shields[id] ??= { protect: 0, heal: 0 });
+  active('protect').forEach(a => { shieldFor(a.targetId).protect++; });
+  active('heal').forEach(a => {
+    shieldFor(a.targetId).heal++;
+    updates[`players/${a.fromId}/witchHeal`] = false;
+  });
   active('poison').forEach(a => { updates[`players/${a.fromId}/witchPoison`] = false; });
 
   // 5. Seer
@@ -1826,44 +1830,26 @@ function resolveNight(game, roundActions, players) {
     a.notes.push(`will see ${alignment === 'wolf' ? '🐺 WEREWOLF' : '✅ NOT A WEREWOLF'}`);
   });
 
-  // 6. Attacks — the pack's kill, poison, silver bullet
+  // 6. Attacks — every werewolf makes their own kill, then poison, then the silver bullet.
+  // A healing potion cancels one wolf attack; a Doctor's protection cancels one wolf attack or poison.
+  // So two wolves on the same player get past a single protection.
   const hits = [];
-  const savedNames = [];
-  const kills = active('kill');
-  if (kills.length) {
-    // The pack attacks its most-picked target (earliest pick breaks ties)
-    const tally = {};
-    kills.forEach(a => { tally[a.targetId] = (tally[a.targetId] || 0) + 1; });
-    const top = Math.max(...Object.values(tally));
-    const chosen = kills.find(a => tally[a.targetId] === top);
-    kills.forEach(a => {
-      if (a === chosen) return;
-      if (a.targetId === chosen.targetId) {
-        a.notes.push('agrees with the pack');
-      } else {
-        a.cls = 'cancelled';
-        a.notes.push(`outvoted — the pack attacks ${chosen.targetName}`);
-      }
-    });
-    if (protectedIds.has(chosen.targetId)) {
-      chosen.cls = 'saved';
-      chosen.notes.push('BLOCKED — protected by the Doctor');
-      savedNames.push(chosen.targetName);
-    } else if (healedIds.has(chosen.targetId)) {
-      chosen.cls = 'saved';
-      chosen.notes.push("BLOCKED — saved by the Witch's healing potion");
-      savedNames.push(chosen.targetName);
-    } else {
-      hits.push(chosen);
-    }
-  }
+  const wolfBlocked = new Set();
+  const tryBlock = (a, kinds) => {
+    const s = shields[a.targetId];
+    const kind = s && kinds.find(k => s[k] > 0);
+    if (!kind) return false;
+    s[kind]--;
+    a.cls = 'saved';
+    a.notes.push(kind === 'protect' ? 'BLOCKED — protected by the Doctor' : "BLOCKED — saved by the Witch's healing potion");
+    return true;
+  };
+  active('kill').forEach(a => {
+    if (tryBlock(a, ['heal', 'protect'])) wolfBlocked.add(a.targetId);
+    else hits.push(a);
+  });
   active('poison').forEach(a => {
-    if (protectedIds.has(a.targetId)) {
-      a.cls = 'saved';
-      a.notes.push('BLOCKED — protected by the Doctor');
-    } else {
-      hits.push(a);
-    }
+    if (!tryBlock(a, ['protect'])) hits.push(a);
   });
   active('shoot').forEach(a => {
     updates[`players/${a.fromId}/actionUsed`] = true;
@@ -1913,7 +1899,15 @@ function resolveNight(game, roundActions, players) {
 
   // Narrative for the GM to read aloud
   const report = [];
-  savedNames.forEach(n => report.push(`"The wolves came for ${n} in the night — but someone was watching over them. ${n} survived."`));
+  wolfBlocked.forEach(id => {
+    const p = byId(id);
+    if (!p) return;
+    if (died.includes(p) || wounded.includes(p)) {
+      gmNotes.push(`[NOTE: ${p.name} was protected, but more wolves attacked than the protection could stop.]`);
+      return;
+    }
+    report.push(`"The wolves came for ${p.name} in the night — but someone was watching over them. ${p.name} survived."`);
+  });
   wounded.forEach(p => report.push(`"${p.name} was attacked in the night and badly hurt — but is still standing. One more attack will finish them."`));
   if (died.length === 1) {
     report.push(`"Tragically, we found ${died[0].name} this morning. They did not survive the night."`);

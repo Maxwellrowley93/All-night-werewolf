@@ -40,11 +40,11 @@ The app checks for a win after every night and every elimination, and ends the g
 
 | Role | Team | What it does |
 |---|---|---|
-| 🐺 Werewolf | Wolves | Each night, pick a victim. If the pack disagrees, the most-picked player is attacked, and ties go to whoever was picked first. Werewolves can see their pack. |
+| 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack. |
 | 🏡 Villager | Village | No ability. Use your wits at Town Hall. |
 | 🔮 Seer | Village | Each night, inspect a player. When the night ends, your phone shows whether they are a Werewolf. |
-| ⚕️ Doctor | Village | Each night, protect a player (yourself included) from the wolf attack and from poison. |
-| 🧙 Witch | Village | One Healing Potion (saves the wolves' target if you guess right) and one Poison Potion (kills anyone). Each can be used once, and only one per night. |
+| ⚕️ Doctor | Village | Each night, protect a player (yourself included). The protection cancels **one** attack on them, either a wolf kill or poison. Two wolves on the same target still get through. |
+| 🧙 Witch | Village | One Healing Potion (cancels one wolf attack on a player) and one Poison Potion (kills anyone). Each can be used once, and only one per night. |
 | 🎯 Hunter | Village | Once per game, shoot a player at night. Nothing can stop the silver bullet. |
 | 🎵 Bard | Village | Once per game, choose a player whose vote counts double at the next Town Hall. The GM is reminded to count that vote twice. |
 | 🐐 Scapegoat | Village | Once per game, choose a player. At the next Town Hall, every vote against them counts against you instead. The vote tracker applies this automatically. |
@@ -53,7 +53,7 @@ The app checks for a win after every night and every elimination, and ends the g
 | 🎭 Puppetmaster | Village | Each night, pick a player to control and a new target for them. Their action hits your chosen target instead. |
 | 🔗 Symbiote | Village | Once per game, bond with a player. From then on, if either of you dies, so does the other. |
 | ⭐ Mayor | Village | Revealed to everyone when the game starts. |
-| 🛡️ Tank | Village | Survives the first night attack (they're wounded and it's announced). The second attack kills. A Town Hall vote still eliminates them outright. |
+| 🛡️ Tank | Village | Survives the first night attack (they're wounded and it's announced). The second attack kills, whether it comes on a later night or the same night, so two wolves can kill an unwounded Tank in one night. A Town Hall vote still eliminates them outright. |
 | 🧔 Hairy Villager | Village | A Villager, but the Werewolves see them listed as part of their pack. The Seer sees them as not a Werewolf. |
 
 ### Night resolution order
@@ -65,7 +65,7 @@ When the night ends, actions are applied in this order:
 3. **Symbiote.** The bond is formed. It takes effect immediately, so it counts for deaths that same night.
 4. **Doctor and the Witch's healing potion.**
 5. **Seer.**
-6. **Attacks.** The pack's kill (unless the target is protected or healed), poison (unless protected), then the Hunter's shot. A Tank who hasn't been hit before survives a single hit. Two hits in one night kill them.
+6. **Attacks.** Each werewolf's kill, then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
 7. **Symbiote deaths.** If one bonded player died, their partner dies too.
 8. **Bard and Scapegoat.** Their effects are stored for the next Town Hall.
 
