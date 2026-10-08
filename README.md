@@ -7,10 +7,10 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 ## How to play
 
 ### 1. Set up
-1. The GM opens the app, enters their name and taps **Create New Game**.
+1. The GM opens the app, enters their name and taps **Create New Game**. The GM's screen shows the room code, who has joined, and the role setup.
 2. Players open the app, enter their name and the room code, and tap **Join Game**. You can also share `…/All-night-werewolf/?room=ABCD` and the code is filled in for you.
-3. On the **Setup** tab, the GM chooses how many of each role to include. The role count must match the number of players and include at least one Werewolf. The GM also sets **Rounds before Town Hall**.
-4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random and Night 1 begins.
+3. The GM chooses how many of each role to include. The role count must match the number of players and include at least one Werewolf.
+4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
 - Each player taps their role card to see their role, then taps again to hide it. The card also hides itself if they switch apps.
@@ -18,16 +18,14 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 - Players with a night ability choose a target on their phone and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
 - Everyone mingles, schemes and bluffs.
 - On the **Actions** tab, the GM sees every action as it comes in, a step-by-step preview of how the night will play out, and the script that will be read.
-- On the **Players** tab, the GM ends the night with either:
-  - **End Night → Start Night N**, to play another night, or
-  - **End Night → Call Town Hall**, which gets highlighted once the configured number of nights has passed.
+- On the **Players** tab, the GM taps **End Night → Call Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first.
 
 Deaths are applied as soon as a night ends. Eliminated players become ghosts on their phones.
 
 ### 3. Town Hall
-- The **Town Hall** tab shows a script covering every night since the last Town Hall. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only.
+- The **Town Hall** tab shows a script describing what happened in the night. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only.
 - The village discusses and votes. The GM counts the votes with the +/− buttons, and ghost votes are added automatically.
-- The GM eliminates whoever leads the vote, or runs a tiebreak if it's a tie, then taps **Start Night** to begin the next round.
+- The GM eliminates whoever leads the vote, or runs a tiebreak if it's a tie, then taps **Start Night** to begin the next round. Every night is followed by a Town Hall.
 
 ### Winning
 - **Villagers** win when every Werewolf is dead.
