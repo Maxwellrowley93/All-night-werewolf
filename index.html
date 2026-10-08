@@ -824,13 +824,14 @@
     <div class="card">
       <div class="phase-banner phase-night" id="player-phase-banner">🌙 Night has fallen…</div>
       <div class="info-box" id="player-status-box">The night is active. Complete your action if you have one, then mingle.</div>
+      <div class="info-box" id="mayorBox" style="display:none"></div>
 
       <!-- Role Card -->
       <div class="role-reveal-card" id="roleCard" onclick="toggleRoleCard()">
         <div class="role-reveal-back">
           <div class="eye-icon">🃏</div>
           <h3 style="color:var(--moon)">Your Role</h3>
-          <p>Tap and hold to reveal<br>Make sure no one is watching</p>
+          <p>Tap to reveal · tap again to hide<br>Make sure no one is watching</p>
         </div>
         <div class="role-reveal-front" id="roleCardFront">
           <div class="role-name" id="playerRoleName"></div>
@@ -848,7 +849,7 @@
       <!-- Seer result -->
       <div id="playerSeerResult" style="display:none">
         <hr class="divider">
-        <h3>🔮 Vision</h3>
+        <h3>🔮 Visions</h3>
         <div id="playerSeerResultContent"></div>
       </div>
 
@@ -929,7 +930,8 @@
         <h2>Role Setup</h2>
         <p class="text-mist text-small" style="margin-bottom:12px">Configure which roles to include. Roles are assigned randomly when you start the game.</p>
         <div id="role-setup-controls"></div>
-        <button class="btn btn-gold mt-16" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
+        <div class="info-box mt-16" id="role-total"></div>
+        <button class="btn btn-gold" id="assign-roles-btn" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
       </div>
 
       <div class="card">
@@ -948,6 +950,8 @@
       </div>
     </div>
   </div>
+
+  <button class="btn btn-secondary btn-sm mt-16" id="leave-btn" style="display:none" onclick="leaveGame()">Leave game</button>
 
 </div>
 
@@ -980,6 +984,7 @@ let state = {
   lastHash: null,
   gmRoundCount: 3,
   cardShown: false,
+  phaseKey: null,
 };
 
 // ============================================================
@@ -1035,7 +1040,7 @@ const ROLES = {
   werewolf: {
     name: 'Werewolf', team: 'wolf', emoji: '🐺',
     desc: 'The cunning and bloodthirsty Werewolf.',
-    ability: 'Each round, coordinate with your pack to silently choose a player to eliminate. Report your kill to the Game Master.',
+    ability: 'Each night, coordinate with your pack and pick a victim on your phone. If the pack disagrees, the most-picked player is attacked.',
     hasAction: true, actionType: 'kill',
     cssClass: 'role-werewolf'
   },
@@ -1049,42 +1054,42 @@ const ROLES = {
   seer: {
     name: 'Seer', team: 'village', emoji: '🔮',
     desc: 'A wise individual with the ability to see through deception.',
-    ability: 'Each round, approach the Game Master privately and choose a player to inspect. The GM will reveal if they are a Villager or Werewolf.',
+    ability: 'Each night, choose a player to inspect. When the night ends, your phone shows whether they are a Werewolf.',
     hasAction: true, actionType: 'inspect',
     cssClass: 'role-seer'
   },
   doctor: {
     name: 'Doctor', team: 'village', emoji: '⚕️',
     desc: 'A skilled healer devoted to protecting the innocent.',
-    ability: 'Each round, tell the Game Master one player to protect. That player cannot be eliminated that night.',
+    ability: 'Each night, choose one player (or yourself) to protect. They cannot be killed by the wolves or poisoned that night.',
     hasAction: true, actionType: 'protect',
     cssClass: 'role-doctor'
   },
   witch: {
     name: 'Witch', team: 'village', emoji: '🧙',
     desc: 'A mysterious figure with ancient knowledge of potions.',
-    ability: 'You have two one-use potions: a Healing Potion (save a player from elimination) and a Poison Potion (eliminate any player). Tell the GM when and who you use them on.',
+    ability: 'You have two one-use potions: a Healing Potion (if the wolves attack that player tonight, they survive) and a Poison Potion (eliminate any player). One potion per night.',
     hasAction: true, actionType: 'potion',
     cssClass: 'role-witch'
   },
   hunter: {
     name: 'Hunter', team: 'village', emoji: '🎯',
     desc: 'Get that wolf.',
-    ability: 'Once per game, you may shoot one player with your silver bullet. Report your target to the GM at any time.',
+    ability: 'Once per game, during the night, fire your silver bullet at one player. Nothing can save them.',
     hasAction: true, actionType: 'shoot',
     cssClass: 'role-hunter'
   },
   bard: {
     name: 'Bard', team: 'village', emoji: '🎵',
     desc: 'A charismatic entertainer who uses the power of persuasion.',
-    ability: 'Once during the game, choose a player. Their vote is doubled during the next Town Hall vote. Tell the GM before voting opens.',
+    ability: 'Once per game, choose a player during the night. Their vote counts double at the next Town Hall.',
     hasAction: true, actionType: 'double',
     cssClass: 'role-bard'
   },
   scapegoat: {
     name: 'Scapegoat', team: 'village', emoji: '🐐',
     desc: 'A misunderstood villager who attracts suspicion.',
-    ability: 'Once per game, before votes are tallied, tell the GM to redirect all votes from another player to yourself.',
+    ability: 'Once per game, choose a player during the night. At the next Town Hall, every vote against them counts against you instead.',
     hasAction: true, actionType: 'redirect',
     cssClass: 'role-scapegoat'
   },
@@ -1098,35 +1103,35 @@ const ROLES = {
   seductress: {
     name: 'Seductress', team: 'village', emoji: '💋',
     desc: 'A charming and alluring figure skilled in manipulation.',
-    ability: 'Each round, choose a player to distract. They cannot use their special ability this round. Tell the GM your target.',
+    ability: 'Each night, choose a player to distract. Whatever action they take that night has no effect.',
     hasAction: true, actionType: 'distract',
     cssClass: 'role-seductress'
   },
   puppetmaster: {
     name: 'Puppetmaster', team: 'village', emoji: '🎭',
     desc: 'A master manipulator who controls the actions of others.',
-    ability: 'Each round, choose a player to control. The GM will redirect their action. If they have no action, nothing happens.',
+    ability: 'Each night, choose a player to control and a new target for them. Their action hits your chosen target instead. If they have no action, nothing happens.',
     hasAction: true, actionType: 'control',
     cssClass: 'role-puppetmaster'
   },
   symbiote: {
     name: 'Symbiote', team: 'village', emoji: '🔗',
     desc: 'A parasitic entity that can form alliances.',
-    ability: 'Once per game, bond with a player. If either of you is eliminated, both die. Tell the GM your bond target.',
+    ability: 'Once per game, bond with a player. From then on, if either of you is eliminated, both die.',
     hasAction: true, actionType: 'bond',
     cssClass: 'role-symbiote'
   },
   mayor: {
     name: 'Mayor', team: 'village', emoji: '⭐',
     desc: 'A trustworthy official with a big target on their back.',
-    ability: 'At the start of the game, publicly reveal your role to all villagers. You are a known ally — and a known target.',
+    ability: 'Your role is revealed to everyone when the game starts. You are a known ally — and a known target.',
     hasAction: false,
     cssClass: 'role-mayor'
   },
   tank: {
     name: 'Tank', team: 'village', emoji: '🛡️',
     desc: 'You can take a hit.',
-    ability: 'It takes two kills to eliminate you. On the first hit, the GM announces at Town Hall that you are wounded. The second hit kills you.',
+    ability: 'It takes two night attacks to kill you. The first leaves you wounded (announced at Town Hall); the second kills you. A Town Hall vote still eliminates you outright.',
     hasAction: false,
     cssClass: 'role-tank'
   },
@@ -1143,14 +1148,15 @@ const ROLES = {
 const ACTION_ORDER = {
   distract: 1,
   control: 2,
-  protect: 3,
-  inspect: 4,
-  kill: 5,
-  shoot: 6,
-  potion: 7,
-  bond: 8,
-  double: 9,
-  redirect: 10
+  bond: 3,
+  protect: 4,
+  heal: 5,
+  inspect: 6,
+  kill: 7,
+  poison: 8,
+  shoot: 9,
+  double: 10,
+  redirect: 11
 };
 
 // ============================================================
@@ -1188,6 +1194,11 @@ function generateId() {
   return Math.random().toString(36).substr(2,9);
 }
 
+// Escape user-supplied text (player names) before putting it into HTML
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
@@ -1197,7 +1208,8 @@ function toast(msg, duration=3000) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), duration);
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
 function roleBadge(roleKey) {
@@ -1218,6 +1230,104 @@ function getGhosts(game) {
   return getPlayerList(game).filter(p => p.eliminated);
 }
 
+function getRoundActions(game) {
+  return Object.values(game.actions || {}).filter(a => a && a.round === game.round);
+}
+
+// Once-per-game abilities that have already been used
+function abilitySpent(p, game) {
+  switch (p.role) {
+    case 'hunter': case 'bard': case 'scapegoat': return !!p.actionUsed;
+    case 'symbiote': return !!p.actionUsed || !!game.symbiote;
+    case 'witch': return p.witchHeal === false && p.witchPoison === false;
+    default: return false;
+  }
+}
+
+// Living players who could still act tonight but haven't
+function pendingPlayers(game) {
+  return getLivingPlayers(game).filter(p => ROLES[p.role]?.hasAction && !p.actionSubmitted && !abilitySpent(p, game));
+}
+
+const WIN_TEXT = {
+  village: '🎉 <strong>The Villagers win!</strong> All werewolves have been eliminated.',
+  wolf: '🐺 <strong>The Werewolves win!</strong> They have taken the village.',
+  jester: '🃏 <strong>The Jester wins!</strong> The village voted them out — exactly as planned.'
+};
+
+const WIN_BANNER = {
+  village: '🎉 Villagers Win!',
+  wolf: '🐺 Werewolves Win!',
+  jester: '🃏 The Jester Wins!'
+};
+
+// ============================================================
+// SESSION — remembers your game so a page refresh doesn't lose it
+// ============================================================
+
+const SESSION_KEY = 'allnight-werewolf-session';
+
+function saveSession() {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      roomCode: state.roomCode, playerId: state.playerId, playerName: state.playerName, isGM: state.isGM
+    }));
+  } catch(e) {}
+}
+
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e) { return null; }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+}
+
+function enterGame() {
+  saveSession();
+  document.getElementById('leave-btn').style.display = 'block';
+  if (state.isGM) {
+    showScreen('gm');
+    document.getElementById('gm-room-code-badge').textContent = state.roomCode;
+    document.getElementById('rounds-display').textContent = state.gmRoundCount;
+    updateGmPhaseBanner('lobby');
+    buildRoleSetup();
+  } else {
+    document.getElementById('lobby-player-greeting').textContent = `Welcome, ${state.playerName}`;
+    showScreen('player-lobby');
+  }
+  startPolling();
+}
+
+async function restoreSession() {
+  const saved = loadSession();
+  if (!saved?.roomCode) return;
+  const game = await fbGet(`games/${saved.roomCode}`);
+  if (game && (saved.isGM || game.players?.[saved.playerId])) {
+    Object.assign(state, saved);
+    if (state.isGM) state.gmRoundCount = game.roundsPerTownHall || 3;
+    enterGame();
+  } else {
+    // Couldn't load it — prefill the form so a player can rejoin by name
+    document.getElementById('playerName').value = saved.playerName || '';
+    document.getElementById('joinCode').value = saved.roomCode;
+    toast(`Couldn't reload game ${saved.roomCode}. Rejoin with the same name.`, 4000);
+  }
+}
+
+window.leaveGame = function() {
+  const msg = state.isGM
+    ? 'Leave this game? You will no longer be able to run it from this device.'
+    : 'Leave this game? You can rejoin later with the same name and room code.';
+  if (!confirm(msg)) return;
+  clearInterval(state.pollInterval);
+  clearSession();
+  Object.assign(state, { roomCode: null, playerId: null, playerName: null, isGM: false, gameData: null, pollInterval: null, lastHash: null, phaseKey: null });
+  pendingAction = { type: null };
+  document.getElementById('leave-btn').style.display = 'none';
+  showScreen('landing');
+};
+
 // ============================================================
 // LANDING — CREATE / JOIN
 // ============================================================
@@ -1226,35 +1336,25 @@ window.createGame = async function() {
   const name = document.getElementById('playerName').value.trim();
   if (!name) { toast('Enter your name first'); return; }
 
-  const code = generateCode();
-  const gmId = generateId();
+  // Avoid reusing a room code that's already taken
+  let code = generateCode();
+  for (let i = 0; i < 5 && await fbGet(`games/${code}`); i++) code = generateCode();
 
   const gameData = {
     phase: 'lobby',
     round: 0,
-    roundsPerTownHall: 3,
-    players: {},
-    actions: {},
-    votes: {},
-    ghostVotes: {},
-    log: [],
-    symbiote: null,
-    bardDoubled: null,
-    ghostVoteTarget: null
+    roundsPerTownHall: state.gmRoundCount,
+    lastTownHallRound: 0,
+    createdAt: Date.now()
   };
 
-  await fbSet(`games/${code}`, gameData);
+  if (!await fbSet(`games/${code}`, gameData)) {
+    toast("Couldn't reach the server. Check your connection.");
+    return;
+  }
 
-  state.roomCode = code;
-  state.playerId = 'GM';
-  state.playerName = name;
-  state.isGM = true;
-
-  showScreen('gm');
-  document.getElementById('gm-room-code-badge').textContent = code;
-  updateGmPhaseBanner('lobby');
-  buildRoleSetup();
-  startPolling();
+  Object.assign(state, { roomCode: code, playerId: 'GM', playerName: name, isGM: true, lastHash: null });
+  enterGame();
   toast(`Room created: ${code}`);
 };
 
@@ -1267,35 +1367,33 @@ window.joinGame = async function() {
   const game = await fbGet(`games/${code}`);
   if (!game) { toast('Room not found. Check the code.'); return; }
 
-  // Check duplicate names
-  const existing = game.players ? Object.values(game.players) : [];
-  if (existing.find(p => p.name.toLowerCase() === name.toLowerCase())) {
-    toast('That name is taken!'); return;
+  let playerId;
+  let playerName = name;
+  const existing = getPlayerList(game).find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    // Same name already in the game — most likely the same person rejoining
+    if (!confirm(`Someone called ${existing.name} is already in this game.\n\nOK — that's me, rejoin as ${existing.name}\nCancel — I'll pick a different name`)) return;
+    playerId = existing.id;
+    playerName = existing.name;
+  } else if (game.phase !== 'lobby') {
+    toast('This game has already started.');
+    return;
+  } else {
+    playerId = generateId();
+    const ok = await fbSet(`games/${code}/players/${playerId}`, {
+      name,
+      eliminated: false,
+      wounded: false,
+      actionSubmitted: false,
+      actionUsed: false,
+      witchHeal: true,
+      witchPoison: true
+    });
+    if (!ok) { toast("Couldn't reach the server. Check your connection."); return; }
   }
 
-  const playerId = generateId();
-  await fbSet(`games/${code}/players/${playerId}`, {
-    name,
-    role: null,
-    eliminated: false,
-    wounded: false,
-    inspiration: false,
-    actionSubmitted: false,
-    actionUsed: false,
-    bondedWith: null,
-    witchHeal: true,
-    witchPoison: true,
-    votes: 0
-  });
-
-  state.roomCode = code;
-  state.playerId = playerId;
-  state.playerName = name;
-  state.isGM = false;
-
-  document.getElementById('lobby-player-greeting').textContent = `Welcome, ${name}`;
-  showScreen('player-lobby');
-  startPolling();
+  Object.assign(state, { roomCode: code, playerId, playerName, isGM: false, lastHash: null });
+  enterGame();
 };
 
 // ============================================================
@@ -1309,12 +1407,20 @@ function startPolling() {
 }
 
 async function pollGame() {
+  if (!state.roomCode) return;
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game) return;
   const hash = JSON.stringify(game);
   if (hash === state.lastHash) return;
   state.lastHash = hash;
   state.gameData = game;
+
+  // New night or Town Hall — forget any half-made selection from before
+  const phaseKey = `${game.phase}-${game.round}`;
+  if (phaseKey !== state.phaseKey) {
+    state.phaseKey = phaseKey;
+    pendingAction = { type: null };
+  }
 
   if (state.isGM) {
     renderGm(game);
@@ -1331,271 +1437,301 @@ function renderPlayer(game) {
   const me = game.players?.[state.playerId];
   if (!me) return;
 
-  // Game over
-  if (game.phase === 'ended') {
-    showScreen('player-role');
-    const banner = document.getElementById('player-phase-banner');
-    const statusBox = document.getElementById('player-status-box');
-    banner.className = 'phase-banner phase-lobby';
-    banner.textContent = '🏁 The game is over';
-    if (game.winner === 'village') {
-      statusBox.innerHTML = '🎉 <strong>The Villagers win!</strong> All werewolves have been eliminated.';
-    } else if (game.winner === 'wolf') {
-      statusBox.innerHTML = '🐺 <strong>The Werewolves win!</strong> They have taken the village.';
-    } else {
-      statusBox.textContent = 'The game has ended.';
-    }
-    document.getElementById('playerActionArea').style.display = 'none';
-    document.getElementById('playerGhostArea').style.display = 'none';
-    document.getElementById('playerSeerResult').style.display = 'none';
-    return;
-  }
-
   // Lobby phase
   if (game.phase === 'lobby') {
     showScreen('player-lobby');
-    const list = document.getElementById('lobby-player-list');
-    const players = getPlayerList(game);
-    list.innerHTML = players.map(p =>
-      `<div class="player-row"><span class="player-name">${p.name}</span></div>`
+    document.getElementById('lobby-player-list').innerHTML = getPlayerList(game).map(p =>
+      `<div class="player-row"><span class="player-name">${esc(p.name)}</span></div>`
     ).join('');
     return;
   }
 
   // Role assigned — show role screen
   showScreen('player-role');
-  const roleKey = me.role;
-  const role = ROLES[roleKey];
-
-  // Phase banner
+  const role = ROLES[me.role];
   const banner = document.getElementById('player-phase-banner');
   const statusBox = document.getElementById('player-status-box');
-  if (game.phase === 'night') {
-    banner.className = 'phase-banner phase-night';
-    banner.textContent = `🌙 Night ${game.round} — mingle, scheme, act…`;
-    statusBox.textContent = me.eliminated
-      ? 'You are a ghost. Haunt wisely.'
-      : (me.actionSubmitted ? 'Your action has been submitted. Mingle.' : 'Submit your nightly action below if you have one.');
-  } else if (game.phase === 'townhall') {
-    banner.className = 'phase-banner phase-townhall';
-    banner.textContent = `🕯️ Town Hall — after Night ${game.round}`;
-    statusBox.textContent = me.eliminated
-      ? 'Ghost: your vote has been noted by the GM.'
-      : 'Discuss, debate, then cast your vote with the Game Master.';
-  }
+  const actionArea = document.getElementById('playerActionArea');
+  const ghostArea = document.getElementById('playerGhostArea');
 
-  // Populate role card (only if not yet shown — or re-render)
-  document.getElementById('playerRoleName').textContent = `${role?.emoji || ''} ${role?.name || roleKey}`;
+  document.getElementById('playerRoleName').textContent = `${role?.emoji || ''} ${role?.name || me.role}`;
   document.getElementById('playerRoleDesc').textContent = role?.desc || '';
   document.getElementById('playerRoleAbility').textContent = '⚡ ' + (role?.ability || '');
 
-  // Werewolf pack reveal
+  // Werewolf pack — includes any Hairy Villager, sorted so they can't be told apart
   const wolfBox = document.getElementById('wolfPartnersBox');
   if (role?.team === 'wolf') {
-    const pack = getPlayerList(game).filter(p => p.role === 'werewolf' && p.id !== state.playerId);
-    if (pack.length > 0) {
-      wolfBox.style.display = 'block';
-      document.getElementById('wolfPartnersList').textContent = pack.map(p=>p.name).join(', ');
-    }
+    const pack = getPlayerList(game)
+      .filter(p => p.id !== state.playerId && (p.role === 'werewolf' || p.role === 'hairy_villager'))
+      .map(p => p.name)
+      .sort((a, b) => a.localeCompare(b));
+    wolfBox.style.display = pack.length ? 'block' : 'none';
+    document.getElementById('wolfPartnersList').textContent = pack.join(', ');
   } else {
     wolfBox.style.display = 'none';
   }
 
-  // Hairy villager — werewolves see them as pack
-  if (role?.team === 'wolf') {
-    const hairy = getPlayerList(game).filter(p => p.role === 'hairy_villager');
-    if (hairy.length > 0) {
-      const list = document.getElementById('wolfPartnersList');
-      list.textContent += (list.textContent ? ', ' : '') + hairy.map(p=>p.name+' ⚠️').join(', ');
-      wolfBox.style.display = 'block';
-    }
+  // Mayor is public knowledge
+  const mayorBox = document.getElementById('mayorBox');
+  const mayor = getPlayerList(game).find(p => p.role === 'mayor' && p.mayorRevealed);
+  if (mayor) {
+    mayorBox.style.display = 'block';
+    mayorBox.textContent = mayor.id === state.playerId
+      ? '⭐ You are the Mayor — everyone knows it.'
+      : `⭐ ${mayor.name} is the Mayor${mayor.eliminated ? ' (eliminated)' : ''}.`;
+  } else {
+    mayorBox.style.display = 'none';
   }
+
+  // Seer visions — newest first
+  const seerArea = document.getElementById('playerSeerResult');
+  const visions = Object.values(me.seerResults || {}).filter(Boolean).sort((a, b) => b.round - a.round);
+  if (me.role === 'seer' && visions.length) {
+    seerArea.style.display = 'block';
+    document.getElementById('playerSeerResultContent').innerHTML = visions.map(r => {
+      const isWolf = r.alignment === 'wolf';
+      return `<div class="info-box ${isWolf ? 'warning' : 'success'}">Night ${r.round}: <strong>${esc(r.targetName)}</strong> is ${isWolf ? '🐺 a <strong>Werewolf</strong>' : '✅ <strong>not a Werewolf</strong>'}.</div>`;
+    }).join('');
+  } else {
+    seerArea.style.display = 'none';
+  }
+
+  // Game over
+  if (game.phase === 'ended') {
+    banner.className = 'phase-banner phase-lobby';
+    banner.textContent = '🏁 The game is over';
+    statusBox.innerHTML = WIN_TEXT[game.winner] || 'The game has ended.';
+    actionArea.style.display = 'none';
+    ghostArea.style.display = 'none';
+    return;
+  }
+
+  // Phase banner
+  if (game.phase === 'night') {
+    banner.className = 'phase-banner phase-night';
+    banner.textContent = `🌙 Night ${game.round} — mingle, scheme, act…`;
+    statusBox.textContent = me.eliminated ? 'You are a ghost. Haunt wisely.'
+      : !role?.hasAction ? 'You have no night action. Mingle, listen, and watch for wolves.'
+      : me.actionSubmitted ? "You're done for tonight. Mingle."
+      : 'Submit your nightly action below.';
+  } else if (game.phase === 'townhall') {
+    banner.className = 'phase-banner phase-townhall';
+    banner.textContent = `🕯️ Town Hall — after Night ${game.round}`;
+    statusBox.textContent = me.eliminated
+      ? 'You are a ghost. Cast your ghost vote below.'
+      : 'Discuss, debate, then cast your vote with the Game Master.';
+  }
+  if (me.wounded && !me.eliminated) statusBox.textContent += ' 🩹 You are wounded — one more attack will kill you.';
 
   // Ghost
-  const ghostArea = document.getElementById('playerGhostArea');
   if (me.eliminated) {
     ghostArea.style.display = 'block';
-    renderGhostVoteArea(game, me);
-    document.getElementById('playerActionArea').style.display = 'none';
+    renderGhostVoteArea(game);
+    actionArea.style.display = 'none';
     return;
-  } else {
-    ghostArea.style.display = 'none';
   }
-
-  // Seer result — shown at Town Hall
-  const seerResultArea = document.getElementById('playerSeerResult');
-  const seerResultContent = document.getElementById('playerSeerResultContent');
-  if (me.role === 'seer' && game.phase === 'townhall' && me.seerResult) {
-    seerResultArea.style.display = 'block';
-    const r = me.seerResult;
-    const isWolf = r.alignment === 'wolf';
-    seerResultArea.innerHTML = `
-      <hr class="divider">
-      <h3>🔮 Vision — Night ${r.round}</h3>
-      <div class="info-box ${isWolf ? 'warning' : 'success'}">
-        You inspected <strong>${r.targetName}</strong>.<br>
-        They are ${isWolf ? '🐺 a <strong>Werewolf</strong>' : '✅ a <strong>Villager</strong> (or not a wolf)'}.
-      </div>`;
-  } else if (me.role === 'seer') {
-    seerResultArea.style.display = 'none';
-  }
+  ghostArea.style.display = 'none';
 
   // Action area
-  const actionArea = document.getElementById('playerActionArea');
   if (role?.hasAction && game.phase === 'night') {
     actionArea.style.display = 'block';
-    renderPlayerAction(game, me, role);
+    renderPlayerAction(game, me);
   } else {
     actionArea.style.display = 'none';
   }
 }
 
-function renderPlayerAction(game, me, role) {
+const SPENT_TEXT = {
+  hunter: 'Your silver bullet has been spent.',
+  bard: "You've used your Bard ability.",
+  scapegoat: "You've used your Scapegoat ability.",
+  symbiote: 'A bond has been formed.',
+  witch: 'Both potions spent.'
+};
+
+// Roles whose ability is optional each night get a "Not tonight" button
+const OPTIONAL_ACTION_ROLES = ['hunter', 'bard', 'scapegoat', 'symbiote', 'witch'];
+
+function renderPlayerAction(game, me) {
   const content = document.getElementById('playerActionContent');
-  const living = getLivingPlayers(game).filter(p => p.id !== state.playerId);
+  const others = getLivingPlayers(game).filter(p => p.id !== state.playerId);
+  const self = { id: state.playerId, name: me.name, label: 'Myself' };
 
   if (me.actionSubmitted) {
-    content.innerHTML = `<div class="submitted-banner">✓ Action submitted — the Game Master has been notified.</div>`;
+    content.innerHTML = `<div class="submitted-banner">✓ You're done for tonight.</div>`;
+    return;
+  }
+  if (abilitySpent(me, game)) {
+    content.innerHTML = `<div class="submitted-banner">${SPENT_TEXT[me.role]}</div>`;
     return;
   }
 
-  // Role-specific UI
+  const prompt = text => `<p class="text-mist text-small" style="margin-bottom:8px">${text}</p>`;
   let html = '';
-  const roleKey = me.role;
 
-  if (roleKey === 'werewolf') {
-    html = `<p class="text-mist text-small" style="margin-bottom:8px">Coordinate with your pack. Choose your kill target:</p>`;
-    html += buildTargetGrid(living, 'kill');
-  } else if (roleKey === 'seer') {
-    html = `<p class="text-mist text-small" style="margin-bottom:8px">Inspect a player — the GM will reveal their alignment:</p>`;
-    html += buildTargetGrid(living, 'inspect');
-  } else if (roleKey === 'doctor') {
-    html = `<p class="text-mist text-small" style="margin-bottom:8px">Choose a player to protect tonight:</p>`;
-    html += buildTargetGrid([...living, {id: state.playerId, name: 'Myself'}], 'protect');
-  } else if (roleKey === 'witch') {
-    html = buildWitchUI(game, me, living);
-  } else if (roleKey === 'hunter') {
-    if (me.actionUsed) {
-      html = `<div class="submitted-banner">Your silver bullet has been spent.</div>`;
-    } else {
-      html = `<p class="text-mist text-small" style="margin-bottom:8px">Fire your single silver bullet:</p>`;
-      html += buildTargetGrid(living, 'shoot');
+  switch (me.role) {
+    case 'werewolf':
+      html = prompt('Coordinate with your pack. Choose your victim:') + buildTargetGrid(others, 'kill');
+      break;
+    case 'seer':
+      html = prompt('Choose a player to inspect — the answer appears here when the night ends:') + buildTargetGrid(others, 'inspect');
+      break;
+    case 'doctor':
+      html = prompt('Choose a player to protect tonight:') + buildTargetGrid([...others, self], 'protect');
+      break;
+    case 'witch':
+      html = buildWitchUI(me, others, self);
+      break;
+    case 'hunter':
+      html = prompt('Fire your single silver bullet:') + buildTargetGrid(others, 'shoot');
+      break;
+    case 'seductress':
+      html = prompt('Choose a player to distract (their action tonight has no effect):') + buildTargetGrid(others, 'distract');
+      break;
+    case 'puppetmaster': {
+      const everyone = getLivingPlayers(game).map(p => p.id === state.playerId ? { ...p, label: 'Myself' } : p);
+      html = prompt('Choose a player to control:') + buildTargetGrid(others, 'control', { button: false })
+        + `<div class="mt-16">${prompt('…and who their action should hit instead:')}</div>`
+        + buildTargetGrid(everyone, 'control', { slot: 'redirect' });
+      break;
     }
-  } else if (roleKey === 'seductress') {
-    html = `<p class="text-mist text-small" style="margin-bottom:8px">Choose a player to distract (blocks their ability):</p>`;
-    html += buildTargetGrid(living, 'distract');
-  } else if (roleKey === 'puppetmaster') {
-    html = `<p class="text-mist text-small" style="margin-bottom:8px">Choose a player to control:</p>`;
-    html += buildTargetGrid(living, 'control');
-  } else if (roleKey === 'bard') {
-    if (me.actionUsed) {
-      html = `<div class="submitted-banner">You've already used your Bard ability.</div>`;
-    } else {
-      html = `<p class="text-mist text-small" style="margin-bottom:8px">Double a player's Town Hall vote this round:</p>`;
-      html += buildTargetGrid(living, 'double');
-    }
-  } else if (roleKey === 'scapegoat') {
-    if (me.actionUsed) {
-      html = `<div class="submitted-banner">You've used your Scapegoat redirect.</div>`;
-    } else {
-      html = `<p class="text-mist text-small" style="margin-bottom:8px">Redirect all votes from another player to yourself:</p>`;
-      html += buildTargetGrid(living, 'redirect');
-    }
-  } else if (roleKey === 'symbiote') {
-    if (me.actionUsed || game.symbiote) {
-      html = `<div class="submitted-banner">Bond already formed.</div>`;
-    } else {
-      html = `<p class="text-mist text-small" style="margin-bottom:8px">Choose a player to bond with — linked fates:</p>`;
-      html += buildTargetGrid(living, 'bond');
-    }
+    case 'bard':
+      html = prompt("Choose a player whose vote counts double at the next Town Hall:") + buildTargetGrid(others, 'double');
+      break;
+    case 'scapegoat':
+      html = prompt('Choose a player — at the next Town Hall, every vote against them counts against you:') + buildTargetGrid(others, 'redirect');
+      break;
+    case 'symbiote':
+      html = prompt('Choose a player to bond with — linked fates:') + buildTargetGrid(others, 'bond');
+      break;
+  }
+
+  if (OPTIONAL_ACTION_ROLES.includes(me.role)) {
+    html += `<button class="btn btn-secondary" onclick="skipAction()">Not tonight</button>`;
   }
 
   content.innerHTML = html;
 }
 
-function buildTargetGrid(players, actionType) {
+// pendingAction holds the player's current (unconfirmed) selection.
+// slot 'target' is the main target; slot 'redirect' is the Puppetmaster's new target.
+let pendingAction = { type: null };
+
+function canConfirm(type) {
+  return pendingAction.type === type && !!pendingAction.targetId && (type !== 'control' || !!pendingAction.redirectId);
+}
+
+function buildTargetGrid(players, actionType, { slot = 'target', button = true } = {}) {
   if (!players.length) return '<p class="text-mist text-small">No valid targets.</p>';
+  const selectedId = pendingAction.type === actionType
+    ? (slot === 'redirect' ? pendingAction.redirectId : pendingAction.targetId)
+    : null;
   let html = `<div class="player-actions-grid">`;
   players.forEach(p => {
-    html += `<div class="action-card" onclick="submitAction('${actionType}','${p.id}','${p.name}',this)">
-      <div class="action-name">${p.name}</div>
+    html += `<div class="action-card${p.id === selectedId ? ' selected' : ''}" data-type="${actionType}" data-slot="${slot}" data-id="${esc(p.id)}" data-name="${esc(p.name)}" onclick="selectTarget(this)">
+      <div class="action-name">${esc(p.label || p.name)}</div>
     </div>`;
   });
   html += `</div>`;
-  html += `<button class="btn btn-primary mt-16" id="confirm-action-btn" onclick="confirmAction('${actionType}')" disabled>Confirm Action</button>`;
+  if (button) {
+    html += `<button class="btn btn-primary mt-16 confirm-action-btn" data-type="${actionType}" onclick="confirmAction()"${canConfirm(actionType) ? '' : ' disabled'}>Confirm Action</button>`;
+  }
   return html;
 }
 
-function buildWitchUI(game, me, living) {
+function buildWitchUI(me, others, self) {
+  const canHeal = me.witchHeal !== false;
+  const canPoison = me.witchPoison !== false;
   let html = '';
-  if (me.witchHeal !== false) {
-    html += `<div class="info-box">🧪 Healing Potion available</div>`;
-    html += `<p class="text-mist text-small" style="margin-bottom:8px">Save a player from elimination:</p>`;
-    html += buildTargetGrid(living, 'heal');
-    html += `<div class="separator">— or use —</div>`;
+  if (canHeal) {
+    html += `<div class="info-box">🧪 Healing Potion — if the wolves attack this player tonight, they survive:</div>`;
+    html += buildTargetGrid([...others, self], 'heal');
   }
-  if (me.witchPoison !== false) {
-    html += `<div class="info-box warning">☠️ Poison Potion available</div>`;
-    html += `<p class="text-mist text-small" style="margin-bottom:8px">Eliminate a player of your choice:</p>`;
-    html += buildTargetGrid(living, 'poison');
-  }
-  if (me.witchHeal === false && me.witchPoison === false) {
-    html = `<div class="submitted-banner">Both potions spent.</div>`;
+  if (canHeal && canPoison) html += `<div class="separator">— or —</div>`;
+  if (canPoison) {
+    html += `<div class="info-box warning">☠️ Poison Potion — eliminate a player:</div>`;
+    html += buildTargetGrid(others, 'poison');
   }
   return html;
 }
 
-let pendingAction = { type: null, targetId: null, targetName: null };
-
-window.submitAction = function(type, targetId, targetName, el) {
-  document.querySelectorAll('.action-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
-  pendingAction = { type, targetId, targetName };
-  const btn = document.getElementById('confirm-action-btn');
-  if (btn) btn.disabled = false;
+window.selectTarget = function(el) {
+  const { type, slot, id, name } = el.dataset;
+  if (pendingAction.type !== type) pendingAction = { type };
+  if (slot === 'redirect') {
+    pendingAction.redirectId = id;
+    pendingAction.redirectName = name;
+  } else {
+    pendingAction.targetId = id;
+    pendingAction.targetName = name;
+  }
+  document.querySelectorAll('.action-card').forEach(c => {
+    const d = c.dataset;
+    const chosenId = d.slot === 'redirect' ? pendingAction.redirectId : pendingAction.targetId;
+    c.classList.toggle('selected', d.type === pendingAction.type && d.id === chosenId);
+  });
+  document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
 };
 
-window.confirmAction = async function(type) {
-  if (!pendingAction.targetId) return;
-  const { type: aType, targetId, targetName } = pendingAction;
+window.confirmAction = async function() {
+  const a = pendingAction;
+  if (!canConfirm(a.type)) return;
+  document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
 
-  await fbPush(`games/${state.roomCode}/actions`, {
+  const action = {
     fromId: state.playerId,
     fromName: state.playerName,
     role: state.gameData.players[state.playerId]?.role,
-    type: aType,
-    targetId,
-    targetName,
+    type: a.type,
+    targetId: a.targetId,
+    targetName: a.targetName,
     round: state.gameData.round,
     timestamp: Date.now()
-  });
+  };
+  if (a.type === 'control') {
+    action.redirectId = a.redirectId;
+    action.redirectName = a.redirectName;
+  }
 
+  await fbPush(`games/${state.roomCode}/actions`, action);
   await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
+  pendingAction = { type: null };
   toast('Action submitted!');
+  pollGame();
 };
 
-function renderGhostVoteArea(game, me) {
+window.skipAction = async function() {
+  await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
+  pendingAction = { type: null };
+  toast('Saving it for another night');
+  pollGame();
+};
+
+function renderGhostVoteArea(game) {
   const area = document.getElementById('ghostVoteContent');
   if (game.phase !== 'townhall') {
     area.innerHTML = '<p class="text-mist text-small">Ghost vote opens at Town Hall.</p>';
     return;
   }
-  if (game.ghostVotes?.[state.playerId]) {
-    area.innerHTML = `<div class="submitted-banner">👻 Ghost vote submitted.</div>`;
+  const myVote = game.ghostVotes?.[state.playerId];
+  if (myVote) {
+    area.innerHTML = `<div class="submitted-banner">👻 Ghost vote cast for ${esc(myVote.targetName)}.</div>`;
     return;
   }
-  const living = getLivingPlayers(game);
-  area.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Vote to eliminate at the start of Town Hall:</p>` +
-    buildTargetGrid(living, 'ghost') +
-    `<button class="btn btn-ghost-blue mt-16" onclick="submitGhostVote()">Submit Ghost Vote</button>`;
+  area.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Who should the village eliminate? Your vote is added to the Town Hall count:</p>` +
+    buildTargetGrid(getLivingPlayers(game), 'ghost', { button: false }) +
+    `<button class="btn btn-ghost-blue mt-16 confirm-action-btn" data-type="ghost" onclick="submitGhostVote()"${canConfirm('ghost') ? '' : ' disabled'}>Submit Ghost Vote</button>`;
 }
 
 window.submitGhostVote = async function() {
-  if (!pendingAction.targetId) { toast('Select a target'); return; }
+  if (!canConfirm('ghost')) { toast('Select a target'); return; }
+  const { targetId, targetName } = pendingAction;
   await fbUpdate(`games/${state.roomCode}/ghostVotes`, {
-    [state.playerId]: { targetId: pendingAction.targetId, targetName: pendingAction.targetName }
+    [state.playerId]: { targetId, targetName }
   });
+  pendingAction = { type: null };
   toast('Ghost vote submitted');
+  pollGame();
 };
 
 // ============================================================
@@ -1622,26 +1758,196 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ============================================================
+// NIGHT RESOLUTION
+// ============================================================
+// Works out what one night's actions do. Used for the GM's live preview,
+// for actually ending the night, and for the Town Hall script.
+// Returns { acts, updates, report }:
+//   acts    — the night's actions in resolution order, annotated with notes
+//   updates — Firebase multi-path updates to apply when the night ends
+//   report  — script lines describing the night (GM-only notes in [brackets])
+
+function resolveNight(game, roundActions, players) {
+  const byId = id => players.find(p => p.id === id);
+  const acts = roundActions
+    .map(a => ({ ...a, notes: [], blocked: false, cls: '' }))
+    .sort((a, b) => (ACTION_ORDER[a.type] || 99) - (ACTION_ORDER[b.type] || 99) || a.timestamp - b.timestamp);
+  const active = type => acts.filter(a => a.type === type && !a.blocked);
+  const updates = {};
+  const gmNotes = [];
+
+  // 1. Seductress — a distracted player's action has no effect
+  const distracted = new Set(acts.filter(a => a.type === 'distract').map(a => a.targetId));
+  acts.forEach(a => {
+    if (a.type !== 'distract' && distracted.has(a.fromId)) {
+      a.blocked = true;
+      a.cls = 'cancelled';
+      a.notes.push('BLOCKED — distracted by the Seductress');
+    }
+  });
+  active('distract').forEach(d => {
+    if (!acts.some(a => a.fromId === d.targetId && a.type !== 'distract')) d.notes.push(`${d.targetName} has no action to block (yet)`);
+  });
+
+  // 2. Puppetmaster — the controlled player's action hits a new target
+  active('control').forEach(c => {
+    const puppets = acts.filter(a => a.fromId === c.targetId && a.type !== 'control' && !a.blocked);
+    if (!puppets.length) { c.notes.push(`${c.targetName} has no action to control (yet)`); return; }
+    puppets.forEach(a => {
+      a.notes.push(`redirected by the Puppetmaster (was ${a.targetName})`);
+      a.targetId = c.redirectId;
+      a.targetName = c.redirectName;
+    });
+  });
+
+  // 3. Symbiote bond
+  let bond = game.symbiote || null;
+  active('bond').forEach(a => {
+    if (bond) { a.notes.push('a bond already exists — no effect'); return; }
+    bond = { aId: a.fromId, aName: a.fromName, bId: a.targetId, bName: a.targetName };
+    updates.symbiote = bond;
+    updates[`players/${a.fromId}/actionUsed`] = true;
+    a.notes.push('fates linked from now on');
+    gmNotes.push(`[NOTE: Symbiote bond formed between ${a.fromName} and ${a.targetName}. Keep it secret — the app links their fates.]`);
+  });
+
+  // 4. Protection and potions
+  const protectedIds = new Set(active('protect').map(a => a.targetId));
+  const healedIds = new Set(active('heal').map(a => a.targetId));
+  active('heal').forEach(a => { updates[`players/${a.fromId}/witchHeal`] = false; });
+  active('poison').forEach(a => { updates[`players/${a.fromId}/witchPoison`] = false; });
+
+  // 5. Seer
+  active('inspect').forEach(a => {
+    const t = byId(a.targetId);
+    if (!t) return;
+    const alignment = ROLES[t.role]?.team === 'wolf' ? 'wolf' : 'village';
+    updates[`players/${a.fromId}/seerResults/r${game.round}`] = { targetName: a.targetName, alignment, round: game.round };
+    a.notes.push(`will see ${alignment === 'wolf' ? '🐺 WEREWOLF' : '✅ NOT A WEREWOLF'}`);
+  });
+
+  // 6. Attacks — the pack's kill, poison, silver bullet
+  const hits = [];
+  const savedNames = [];
+  const kills = active('kill');
+  if (kills.length) {
+    // The pack attacks its most-picked target (earliest pick breaks ties)
+    const tally = {};
+    kills.forEach(a => { tally[a.targetId] = (tally[a.targetId] || 0) + 1; });
+    const top = Math.max(...Object.values(tally));
+    const chosen = kills.find(a => tally[a.targetId] === top);
+    kills.forEach(a => {
+      if (a === chosen) return;
+      if (a.targetId === chosen.targetId) {
+        a.notes.push('agrees with the pack');
+      } else {
+        a.cls = 'cancelled';
+        a.notes.push(`outvoted — the pack attacks ${chosen.targetName}`);
+      }
+    });
+    if (protectedIds.has(chosen.targetId)) {
+      chosen.cls = 'saved';
+      chosen.notes.push('BLOCKED — protected by the Doctor');
+      savedNames.push(chosen.targetName);
+    } else if (healedIds.has(chosen.targetId)) {
+      chosen.cls = 'saved';
+      chosen.notes.push("BLOCKED — saved by the Witch's healing potion");
+      savedNames.push(chosen.targetName);
+    } else {
+      hits.push(chosen);
+    }
+  }
+  active('poison').forEach(a => {
+    if (protectedIds.has(a.targetId)) {
+      a.cls = 'saved';
+      a.notes.push('BLOCKED — protected by the Doctor');
+    } else {
+      hits.push(a);
+    }
+  });
+  active('shoot').forEach(a => {
+    updates[`players/${a.fromId}/actionUsed`] = true;
+    hits.push(a);
+  });
+
+  // Apply hits — a Tank survives their first one
+  const hitCount = {};
+  hits.forEach(a => { hitCount[a.targetId] = (hitCount[a.targetId] || 0) + 1; });
+  const died = [];
+  const wounded = [];
+  Object.entries(hitCount).forEach(([id, n]) => {
+    const p = byId(id);
+    if (!p || p.eliminated) return;
+    if (p.role === 'tank' && !p.wounded && n === 1) wounded.push(p);
+    else died.push(p);
+  });
+  hits.forEach(a => {
+    if (wounded.some(p => p.id === a.targetId)) a.notes.push('Tank — WOUNDED, survives');
+    else if (died.some(p => p.id === a.targetId)) a.notes.push('KILLS');
+  });
+  wounded.forEach(p => { updates[`players/${p.id}/wounded`] = true; });
+
+  // Symbiote — if one of the pair dies, so does the other
+  if (bond) {
+    [[bond.aId, bond.bId], [bond.bId, bond.aId]].forEach(([deadId, partnerId]) => {
+      const partner = byId(partnerId);
+      if (died.some(p => p.id === deadId) && partner && !partner.eliminated && !died.includes(partner)) {
+        died.push(partner);
+        gmNotes.push(`[NOTE: ${partner.name} died through the Symbiote bond.]`);
+      }
+    });
+  }
+  died.forEach(p => { updates[`players/${p.id}/eliminated`] = true; });
+
+  // 7. Town Hall effects
+  active('double').forEach(a => {
+    updates.bardDoubled = { id: a.targetId, name: a.targetName };
+    updates[`players/${a.fromId}/actionUsed`] = true;
+    a.notes.push(`${a.targetName}'s vote counts double at the next Town Hall`);
+  });
+  active('redirect').forEach(a => {
+    updates.scapegoatRedirect = { fromId: a.targetId, fromName: a.targetName, toId: a.fromId, toName: a.fromName };
+    updates[`players/${a.fromId}/actionUsed`] = true;
+    a.notes.push(`at the next Town Hall, votes against ${a.targetName} count against ${a.fromName}`);
+  });
+
+  // Narrative for the GM to read aloud
+  const report = [];
+  savedNames.forEach(n => report.push(`"The wolves came for ${n} in the night — but someone was watching over them. ${n} survived."`));
+  wounded.forEach(p => report.push(`"${p.name} was attacked in the night and badly hurt — but is still standing. One more attack will finish them."`));
+  if (died.length === 1) {
+    report.push(`"Tragically, we found ${died[0].name} this morning. They did not survive the night."`);
+  } else if (died.length > 1) {
+    report.push(`"A grim morning. We found ${died.slice(0, -1).map(p => p.name).join(', ')} and ${died[died.length - 1].name} dead."`);
+  }
+  died.forEach(p => report.push(`[Reveal ${p.name}'s role: ${ROLES[p.role]?.name || p.role}]`));
+  if (!report.length) report.push('"The night passed quietly. Nobody was killed."');
+  report.push(...gmNotes);
+
+  return { acts, updates, report };
+}
+
+// Escape the script, then highlight [GM notes] in gold
+function formatScript(text) {
+  return esc(text).replace(/(\[.*?\])/g, '<span style="color:var(--gold);font-style:normal;font-size:13px">$1</span>');
+}
+
+// ============================================================
 // GM RENDER
 // ============================================================
 
 function renderGm(game) {
   updateGmPhaseBanner(game.phase, game.round);
 
-  if (game.phase === 'ended') {
-    const banner = document.getElementById('gm-phase-banner');
-    if (game.winner === 'village') {
-      banner.textContent = '🎉 Villagers Win!';
-      banner.className = 'phase-banner phase-night';
-    } else if (game.winner === 'wolf') {
-      banner.textContent = '🐺 Werewolves Win!';
-      banner.className = 'phase-banner phase-townhall';
-    }
+  if (game.phase === 'ended' && WIN_BANNER[game.winner]) {
+    document.getElementById('gm-phase-banner').textContent = WIN_BANNER[game.winner];
   }
   renderGmPlayerList(game);
   renderGmPhaseControls(game);
   renderGmActionInbox(game);
   renderGmVoting(game);
+  updateRoleTotal();
+  document.getElementById('assign-roles-btn').disabled = game.phase !== 'lobby';
 }
 
 function updateGmPhaseBanner(phase, round) {
@@ -1660,21 +1966,21 @@ function renderGmPlayerList(game) {
     return;
   }
 
+  const bond = game.symbiote;
+  const canEliminate = game.phase === 'night' || game.phase === 'townhall';
   let html = `<div class="room-code" style="font-size:28px;margin-bottom:12px">${state.roomCode}</div>`;
   players.forEach(p => {
     const isGhost = p.eliminated;
-    const role = ROLES[p.role];
+    const bonded = bond && (p.id === bond.aId || p.id === bond.bId);
     html += `<div class="gm-player-card ${isGhost ? 'ghost-card' : ''}">
       <div class="top-row">
-        <span class="player-name" style="font-size:16px">${p.name}${isGhost?' 👻':''}${p.wounded?' 🩹':''}</span>
+        <span class="player-name" style="font-size:16px">${esc(p.name)}${isGhost?' 👻':''}${p.wounded?' 🩹':''}${bonded?' 🔗':''}</span>
         ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
       </div>
       <div class="player-actions-row">
-        ${game.phase !== 'lobby' ? `
-          ${!isGhost
-            ? `<button class="btn btn-sm btn-danger" onclick="eliminatePlayer('${p.id}')">Eliminate</button>`
-            : ''}
-        ` : ''}
+        ${canEliminate && !isGhost
+          ? `<button class="btn btn-sm btn-danger" onclick="eliminatePlayer('${p.id}')">Eliminate</button>`
+          : ''}
       </div>
     </div>`;
   });
@@ -1688,17 +1994,29 @@ function renderGmPhaseControls(game) {
   if (game.phase === 'lobby') {
     html = `<p class="text-mist text-small" style="margin-bottom:10px">Go to Setup to assign roles first.</p>`;
   } else if (game.phase === 'night') {
-    const pending = getPlayerList(game).filter(p => !p.eliminated && ROLES[p.role]?.hasAction && !p.actionSubmitted);
-    const actionCount = game.actions ? Object.keys(game.actions).length : 0;
+    const pending = pendingPlayers(game);
+    const actionCount = getRoundActions(game).length;
+    const per = game.roundsPerTownHall || 3;
+    const nightsSince = game.round - (game.lastTownHallRound || 0);
+    const due = nightsSince >= per;
+    const dots = Array.from({ length: Math.max(per, nightsSince) }, (_, i) =>
+      `<div class="round-dot${i < nightsSince - 1 ? ' complete' : i === nightsSince - 1 ? ' current' : ''}"></div>`
+    ).join('');
+    const nextBtn = `<button class="btn ${due ? 'btn-secondary' : 'btn-primary'}" onclick="advanceToNextNight()">End Night → Start Night ${game.round + 1} 🌙</button>`;
+    const hallBtn = `<button class="btn ${due ? 'btn-gold' : 'btn-secondary'}" onclick="advanceToTownHall()">End Night → Call Town Hall 🕯️</button>`;
     html = `
-      <div class="info-box">${actionCount} action(s) received. ${pending.length} player(s) with abilities haven't submitted yet${pending.length ? ': '+pending.map(p=>p.name).join(', ') : ''}.</div>
-      <button class="btn btn-gold" onclick="advanceToTownHall()">Call Town Hall 🕯️</button>
+      <div class="round-tracker">${dots}</div>
+      <p class="text-center text-mist text-small" style="margin-bottom:12px">Night ${nightsSince} of ${per} before Town Hall${due ? ' — Town Hall is due' : ''}</p>
+      <div class="info-box">${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}</div>
+      ${due ? hallBtn + nextBtn : nextBtn + hallBtn}
     `;
   } else if (game.phase === 'townhall') {
     html = `
-      <button class="btn btn-secondary" onclick="advanceToNight()">Start Next Night 🌙</button>
+      <button class="btn btn-secondary" onclick="advanceToNight()">Start Night ${game.round + 1} 🌙</button>
       <button class="btn btn-danger mt-8" onclick="endGame()">End Game</button>
     `;
+  } else if (game.phase === 'ended') {
+    html = `<p class="text-mist text-small">The game is over. Tap "Leave game" below to start a new one.</p>`;
   }
   container.innerHTML = html;
 }
@@ -1706,94 +2024,39 @@ function renderGmPhaseControls(game) {
 function renderGmActionInbox(game) {
   const inbox = document.getElementById('gm-action-inbox');
   const resolution = document.getElementById('gm-resolution');
-  const actions = game.actions ? Object.entries(game.actions).map(([id,a])=>({id,...a})) : [];
-  const thisRound = actions.filter(a => a.round === game.round);
+  const thisRound = getRoundActions(game);
 
   if (!thisRound.length) {
-    inbox.innerHTML = '<p class="text-mist text-small">No actions this round yet.</p>';
+    inbox.innerHTML = '<p class="text-mist text-small">No actions this night yet.</p>';
     resolution.innerHTML = '';
     return;
   }
 
-  // Sort by resolution order
-  const sorted = [...thisRound].sort((a,b) => (ACTION_ORDER[a.type]||99)-(ACTION_ORDER[b.type]||99));
-
-  inbox.innerHTML = thisRound.map(a => {
+  inbox.innerHTML = [...thisRound].sort((a, b) => a.timestamp - b.timestamp).map(a => {
     const time = new Date(a.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     return `<div class="action-item">
-      <div class="from">${ROLES[a.role]?.emoji || '?'} ${a.fromName} (${ROLES[a.role]?.name || a.role})</div>
-      <div class="action-text">${actionDescription(a)}</div>
+      <div class="from">${ROLES[a.role]?.emoji || '?'} ${esc(a.fromName)} (${ROLES[a.role]?.name || esc(a.role)})</div>
+      <div class="action-text">${esc(actionDescription(a))}</div>
       <div class="action-time">${time}</div>
     </div>`;
   }).join('');
 
-  // Build resolution guide
-  const players = getPlayerList(game);
-  let resHtml = '<p class="text-mist text-small" style="margin-bottom:8px">Resolve in this order:</p>';
-
-  // Find key interactions
-  const distracted = sorted.find(a => a.type === 'distract');
-  const protected_ = sorted.find(a => a.type === 'protect');
-  const killed = sorted.find(a => a.type === 'kill');
-  const healed = sorted.find(a => a.type === 'heal');
-  const poisoned = sorted.find(a => a.type === 'poison');
-  const inspected = sorted.find(a => a.type === 'inspect');
-
-  sorted.forEach(a => {
-    let desc = actionDescription(a);
-    let cls = '';
-    let note = '';
-
-    if (a.type === 'distract' && distracted) {
-      // Check if distracted player had an action
-      const disTarget = sorted.find(x => x.fromId === a.targetId);
-      if (disTarget) {
-        note = ` → CANCELS ${a.targetName}'s ${disTarget.type} action`;
-        cls = '';
-      }
-    }
-
-    if (a.type === 'protect' && protected_ && killed) {
-      if (protected_.targetId === killed.targetId) {
-        note = ' → SAVES ' + killed.targetName + ' from the kill!';
-        cls = 'saved';
-      }
-    }
-
-    if (a.type === 'kill') {
-      const isProtected = protected_ && protected_.targetId === killed.targetId;
-      const isHealed = healed && healed.targetId === killed.targetId;
-      const isDistracted = distracted && distracted.targetId === a.fromId;
-      const killerTarget = players.find(p => p.id === killed.targetId);
-      if (isProtected || isHealed) {
-        note = ' → BLOCKED by Doctor/Witch';
-        cls = 'cancelled';
-      } else if (isDistracted) {
-        note = ' → Werewolf was distracted — kill BLOCKED';
-        cls = 'cancelled';
-      } else if (killerTarget?.wounded) {
-        note = ' → Target is Tank (wounded) — already wounded, this KILLS them';
-      } else if (killerTarget?.role === 'tank' && !killerTarget?.wounded) {
-        note = ' → Target is Tank — mark as WOUNDED only, not dead';
-      }
-    }
-
-    if (a.type === 'inspect') {
-      const target = players.find(p => p.id === a.targetId);
-      if (target) {
-        const alignment = ROLES[target.role]?.team === 'wolf' ? '🐺 WEREWOLF' : '✅ VILLAGER/OTHER';
-        note = ` → Tell ${a.fromName} privately: ${alignment}`;
-      }
-    }
-
-    resHtml += `<div class="resolution-step ${cls}">${ROLES[a.role]?.emoji||'?'} <strong>${a.fromName}</strong>: ${desc}${note}</div>`;
-  });
-
-  // Symbiote check
-  if (game.symbiote) {
-    resHtml += `<div class="resolution-step">🔗 Symbiote bond: if either <strong>${game.symbiote.a}</strong> or <strong>${game.symbiote.b}</strong> dies, eliminate both.</div>`;
+  if (game.phase !== 'night') {
+    resolution.innerHTML = '<p class="text-mist text-small">This night has been resolved — see the GM Script on the Town Hall tab.</p>';
+    return;
   }
 
+  // Live preview of what will happen when the night ends
+  const { acts, report } = resolveNight(game, thisRound, getPlayerList(game));
+  let resHtml = '<p class="text-mist text-small" style="margin-bottom:8px">The app applies these in order when you end the night:</p>';
+  acts.forEach(a => {
+    const note = a.notes.length ? ' → ' + esc(a.notes.join('; ')) : '';
+    resHtml += `<div class="resolution-step ${a.cls}">${ROLES[a.role]?.emoji||'?'} <strong>${esc(a.fromName)}</strong>: ${esc(actionDescription(a))}${note}</div>`;
+  });
+  if (game.symbiote) {
+    resHtml += `<div class="resolution-step">🔗 Symbiote bond: if either <strong>${esc(game.symbiote.aName)}</strong> or <strong>${esc(game.symbiote.bName)}</strong> dies, both die.</div>`;
+  }
+  resHtml += `<h3 class="mt-16">If you end the night now</h3><div class="gm-script-box">${formatScript(report.join('\n'))}</div>`;
   resolution.innerHTML = resHtml;
 }
 
@@ -1806,11 +2069,10 @@ function actionDescription(a) {
     poison: `uses Poison Potion on ${a.targetName}`,
     shoot: `shoots ${a.targetName} (silver bullet)`,
     distract: `distracts ${a.targetName} (blocks ability)`,
-    control: `controls ${a.targetName}`,
+    control: `controls ${a.targetName}, redirecting their action to ${a.redirectName}`,
     double: `doubles ${a.targetName}'s vote`,
-    redirect: `redirects all votes to self (from ${a.targetName})`,
-    bond: `bonds with ${a.targetName}`,
-    ghost: `ghost votes for ${a.targetName}`
+    redirect: `takes all votes against ${a.targetName}`,
+    bond: `bonds with ${a.targetName}`
   };
   return types[a.type] || a.type;
 }
@@ -1818,60 +2080,63 @@ function actionDescription(a) {
 function renderGmVoting(game) {
   const voteList = document.getElementById('gm-vote-list');
   const controls = document.getElementById('gm-vote-controls');
-  const ghostResult = document.getElementById('ghost-vote-result');
+  const notesBox = document.getElementById('ghost-vote-result');
   const scriptBox = document.getElementById('gm-script-box');
 
-  // Script
-  if (game.gmScript) {
-    // Colour [NOTE/ACTION/REMINDER] lines differently
-    const formatted = game.gmScript.replace(
-      /(\[.*?\])/g,
-      '<span style="color:var(--gold);font-style:normal;font-size:13px">$1</span>'
-    );
-    scriptBox.innerHTML = formatted;
-  }
+  scriptBox.innerHTML = game.gmScript
+    ? formatScript(game.gmScript)
+    : 'No script yet — it is generated when you call Town Hall.';
 
   if (game.phase !== 'townhall') {
     voteList.innerHTML = '<p class="text-mist text-small">Town Hall is not active.</p>';
     controls.innerHTML = '';
-    ghostResult.style.display = 'none';
+    notesBox.style.display = 'none';
     return;
   }
 
   const living = getLivingPlayers(game);
-
-  // Ghost vote tally
-  const ghosts = getGhosts(game);
-  if (ghosts.length > 0 && game.ghostVotes) {
-    const gvotes = Object.values(game.ghostVotes);
-    if (gvotes.length) {
-      const tally = {};
-      gvotes.forEach(v => { tally[v.targetName] = (tally[v.targetName]||0)+1; });
-      const sorted = Object.entries(tally).sort((a,b)=>b[1]-a[1]);
-      ghostResult.style.display = 'block';
-      ghostResult.innerHTML = `👻 Ghost votes: ${sorted.map(([n,c])=>`<strong>${n}</strong> (${c})`).join(', ')}`;
-    }
-  }
-
-  // Vote tracking for living players
   const votes = game.votes || {};
-  const totalVotes = Object.values(votes).reduce((s,v)=>s+(v||0),0);
 
-  // Bard doubled?
-  const bardDoubled = game.bardDoubled;
+  // Ghost votes count towards the total
+  const ghostVotes = Object.values(game.ghostVotes || {});
+  const ghostTally = {};
+  ghostVotes.forEach(v => { ghostTally[v.targetId] = (ghostTally[v.targetId] || 0) + 1; });
 
-  let html = `<div class="flex-between" style="margin-bottom:8px"><span class="text-mist text-small">Click +/− to track votes</span><span class="badge">${totalVotes} total</span></div>`;
+  const totals = {};
+  living.forEach(p => { totals[p.id] = (votes[p.id] || 0) + (ghostTally[p.id] || 0); });
+
+  // Scapegoat takes every vote cast against their chosen player
+  const sg = game.scapegoatRedirect;
+  const sgActive = sg && sg.toId in totals && sg.fromId in totals;
+  if (sgActive) {
+    totals[sg.toId] += totals[sg.fromId];
+    totals[sg.fromId] = 0;
+  }
+  const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
+
+  const notes = [];
+  if (ghostVotes.length) notes.push(`👻 ${ghostVotes.length} ghost vote(s) — already included in the totals.`);
+  if (game.bardDoubled && living.some(p => p.id === game.bardDoubled.id)) {
+    notes.push(`🎵 ${esc(game.bardDoubled.name)}'s vote counts double — press + twice for their vote.`);
+  }
+  if (sgActive) notes.push(`🐐 Votes against ${esc(sg.fromName)} count against ${esc(sg.toName)} instead (Scapegoat).`);
+  notesBox.style.display = notes.length ? 'block' : 'none';
+  notesBox.innerHTML = notes.join('<br>');
+
+  let html = `<div class="flex-between" style="margin-bottom:8px"><span class="text-mist text-small">Tap +/− to count the living players' votes</span><span class="badge">${grandTotal} total</span></div>`;
 
   living.forEach(p => {
     const v = votes[p.id] || 0;
-    const isDoubled = bardDoubled === p.id;
-    const effectiveVotes = isDoubled ? v * 2 : v;
-    const pct = totalVotes > 0 ? Math.min(100, Math.round(effectiveVotes / totalVotes * 100)) : 0;
+    const extras = [];
+    if (ghostTally[p.id]) extras.push(`+${ghostTally[p.id]} 👻`);
+    if (sgActive && p.id === sg.fromId) extras.push('→ 🐐');
+    if (totals[p.id] !== v) extras.push(`= ${totals[p.id]}`);
+    const pct = grandTotal > 0 ? Math.round(totals[p.id] / grandTotal * 100) : 0;
     html += `<div class="player-row">
-      <span class="player-name">${p.name}${isDoubled ? ' <span class="badge badge-gold" style="font-size:9px">×2</span>' : ''}</span>
+      <span class="player-name">${esc(p.name)}${extras.length ? ` <span class="text-gold text-small">${extras.join(' ')}</span>` : ''}</span>
       <div class="flex-between" style="gap:8px">
         <button class="count-btn" onclick="adjustVote('${p.id}',-1)">−</button>
-        <span class="count-val">${v}${isDoubled && v>0 ? `<span style="font-size:12px;color:var(--gold)"> (${effectiveVotes})</span>` : ''}</span>
+        <span class="count-val">${v}</span>
         <button class="count-btn" onclick="adjustVote('${p.id}',1)">+</button>
       </div>
     </div>
@@ -1881,24 +2146,18 @@ function renderGmVoting(game) {
   voteList.innerHTML = html;
 
   // Controls
-  const sorted = living.map(p => {
-    const v = votes[p.id] || 0;
-    const effective = bardDoubled === p.id ? v * 2 : v;
-    return { ...p, effectiveVotes: effective };
-  }).sort((a,b) => b.effectiveVotes - a.effectiveVotes);
-
-  const topVote = sorted[0]?.effectiveVotes || 0;
-  const leaders = sorted.filter(p => p.effectiveVotes === topVote && topVote > 0);
+  const topVote = Math.max(0, ...Object.values(totals));
+  const leaders = living.filter(p => topVote > 0 && totals[p.id] === topVote);
 
   let ctrlHtml = '';
   if (leaders.length === 1) {
     const target = leaders[0];
     ctrlHtml = `
-      <div class="info-box warning">☠️ <strong>${target.name}</strong> leads with ${target.effectiveVotes} vote(s).</div>
-      <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${target.name}</button>
+      <div class="info-box warning">☠️ <strong>${esc(target.name)}</strong> leads with ${topVote} vote(s).</div>
+      <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${esc(target.name)}</button>
     `;
   } else if (leaders.length > 1) {
-    ctrlHtml = `<div class="info-box warning">⚖️ Tie between: ${leaders.map(p=>p.name).join(', ')}. Run a tiebreak vote.</div>`;
+    ctrlHtml = `<div class="info-box warning">⚖️ Tie between: ${esc(leaders.map(p=>p.name).join(', '))}. Run a tiebreak vote.</div>`;
   }
 
   ctrlHtml += `<button class="btn btn-secondary mt-8" onclick="resetVotes()">Reset Votes</button>`;
@@ -1911,303 +2170,182 @@ function renderGmVoting(game) {
 
 window.adjustVote = async function(playerId, delta) {
   const game = await fbGet(`games/${state.roomCode}`);
-  const current = game.votes?.[playerId] || 0;
+  const current = game?.votes?.[playerId] || 0;
   const newVal = Math.max(0, current + delta);
   await fbUpdate(`games/${state.roomCode}/votes`, { [playerId]: newVal });
+  pollGame();
 };
 
 window.resetVotes = async function() {
-  await fbSet(`games/${state.roomCode}/votes`, {});
-  await fbSet(`games/${state.roomCode}/ghostVotes`, {});
+  await fbUpdate(`games/${state.roomCode}`, { votes: null, ghostVotes: null });
   toast('Votes reset');
+  pollGame();
 };
 
-window.eliminatePlayer = async function(playerId) {
+async function endGameIfWon() {
   const game = await fbGet(`games/${state.roomCode}`);
-  const player = game.players?.[playerId];
-  if (!player) return;
+  if (!game || game.phase === 'ended') return;
+  const winner = checkWinCondition(getPlayerList(game));
+  if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner });
+}
 
-  const updates = {};
-  updates[`players/${playerId}/eliminated`] = true;
-  updates[`players/${playerId}/actionSubmitted`] = false;
+async function eliminate(playerId) {
+  const game = await fbGet(`games/${state.roomCode}`);
+  const player = game?.players?.[playerId];
+  if (!player || player.eliminated) return;
 
-  // Symbiote — if bonded partner exists, eliminate them too
-  if (game.symbiote) {
-    const { aId, bId } = game.symbiote;
-    if (playerId === aId) updates[`players/${bId}/eliminated`] = true;
-    if (playerId === bId) updates[`players/${aId}/eliminated`] = true;
+  const updates = { [`players/${playerId}/eliminated`]: true };
+
+  // Symbiote — the bonded partner dies too
+  let partnerName = null;
+  const bond = game.symbiote;
+  if (bond && (playerId === bond.aId || playerId === bond.bId)) {
+    const partnerId = playerId === bond.aId ? bond.bId : bond.aId;
+    const partner = game.players?.[partnerId];
+    if (partner && !partner.eliminated) {
+      updates[`players/${partnerId}/eliminated`] = true;
+      partnerName = partner.name;
+    }
   }
 
   await fbUpdate(`games/${state.roomCode}`, updates);
-  toast(`${player.name} eliminated`);
+  toast(`${player.name} eliminated${partnerName ? ` — and ${partnerName}, through the Symbiote bond` : ''}`, 4000);
+  await endGameIfWon();
+  pollGame();
+}
 
-  // Re-fetch to get updated state for win check
-  const updated = await fbGet(`games/${state.roomCode}`);
-  const allPlayers = getPlayerList(updated);
-  const result = checkWinCondition(allPlayers);
-  if (result === 'village') {
-    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'village' });
-  } else if (result === 'wolf') {
-    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'wolf' });
-  }
+window.eliminatePlayer = async function(playerId) {
+  const name = state.gameData?.players?.[playerId]?.name || 'this player';
+  if (!confirm(`Eliminate ${name}?`)) return;
+  await eliminate(playerId);
 };
 
 window.eliminatePlayerVote = async function(playerId) {
-  await eliminatePlayer(playerId);
-  await fbSet(`games/${state.roomCode}/votes`, {});
-  await fbSet(`games/${state.roomCode}/ghostVotes`, {});
+  const game = await fbGet(`games/${state.roomCode}`);
+  const player = game?.players?.[playerId];
+  if (!player || !confirm(`Eliminate ${player.name} by village vote?`)) return;
+
+  await fbUpdate(`games/${state.roomCode}`, { votes: null, ghostVotes: null });
+
+  // The Jester wins by being voted out
+  if (player.role === 'jester') {
+    await fbUpdate(`games/${state.roomCode}`, { [`players/${playerId}/eliminated`]: true, phase: 'ended', winner: 'jester' });
+    pollGame();
+    return;
+  }
+  await eliminate(playerId);
 };
 
-window.advanceToNight = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
-  const newRound = (game.round || 0) + 1;
+function confirmPending(game) {
+  const pending = pendingPlayers(game);
+  return !pending.length || confirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.\n\nEnd the night anyway?`);
+}
 
-  // Reset action submissions for living players with actions
-  const updates = { phase: 'night', round: newRound, votes: {}, ghostVotes: {}, bardDoubled: null, gmScript: null };
-  const players = getPlayerList(game);
-  players.forEach(p => {
-    if (!p.eliminated) {
-      updates[`players/${p.id}/actionSubmitted`] = false;
-      updates[`players/${p.id}/seerResult`] = null; // clear last vision
-    }
-  });
+// Updates that start the next night
+function nextNightUpdates(game, updates) {
+  updates.phase = 'night';
+  updates.round = (game.round || 0) + 1;
+  getLivingPlayers(game).forEach(p => { updates[`players/${p.id}/actionSubmitted`] = false; });
+  return updates;
+}
+
+window.advanceToNextNight = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'night' || !confirmPending(game)) return;
+
+  const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
+  updates[`nightReports/r${game.round}`] = report;
+  nextNightUpdates(game, updates);
 
   await fbUpdate(`games/${state.roomCode}`, updates);
-  toast('Night phase started 🌙');
+  toast(`Night ${game.round + 1} begins 🌙`);
+  await endGameIfWon();
+  pollGame();
 };
 
 window.advanceToTownHall = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
-  const actions = game.actions ? Object.entries(game.actions).map(([id,a])=>({id,...a})) : [];
-  const thisRound = actions.filter(a => a.round === game.round);
-  const players = getPlayerList(game);
+  if (!game || game.phase !== 'night' || !confirmPending(game)) return;
 
-  const updates = { phase: 'townhall', votes: {} };
+  const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
+  updates[`nightReports/r${game.round}`] = report;
 
-  // --- Resolve Seer inspections ---
-  const inspectActions = thisRound.filter(a => a.type === 'inspect');
-  const distractActions = thisRound.filter(a => a.type === 'distract');
-  inspectActions.forEach(a => {
-    const wasDistracted = distractActions.some(d => d.targetId === a.fromId);
-    if (wasDistracted) return;
-    const target = players.find(p => p.id === a.targetId);
-    if (!target) return;
-    const alignment = ROLES[target.role]?.team === 'wolf' ? 'wolf' : 'village';
-    updates[`players/${a.fromId}/seerResult`] = {
-      targetId: a.targetId,
-      targetName: a.targetName,
-      alignment,
-      round: game.round
-    };
-  });
-
-  // --- Resolve night kills and apply to player records ---
-  const killAction = thisRound.find(a => a.type === 'kill');
-  const protect = thisRound.find(a => a.type === 'protect');
-  const heal = thisRound.find(a => a.type === 'heal');
-  const poison = thisRound.find(a => a.type === 'poison');
-  const shoot = thisRound.find(a => a.type === 'shoot');
-  const killerDistracted = killAction && distractActions.some(d => d.targetId === killAction.fromId);
-
-  // Wolf kill
-  if (killAction && !killerDistracted) {
-    const target = players.find(p => p.id === killAction.targetId);
-    if (target) {
-      const isProtected = protect && protect.targetId === killAction.targetId;
-      const isHealed = heal && heal.targetId === killAction.targetId;
-      const isTank = target.role === 'tank';
-      const isWounded = target.wounded;
-      if (!isProtected && !isHealed) {
-        if (isTank && !isWounded) {
-          updates[`players/${target.id}/wounded`] = true; // first hit
-        } else {
-          updates[`players/${target.id}/eliminated`] = true;
-          updates[`players/${target.id}/actionSubmitted`] = false;
-        }
-      }
-    }
+  // Script covers every night since the last Town Hall
+  const reports = {};
+  for (let r = (game.lastTownHallRound || 0) + 1; r < game.round; r++) {
+    reports[r] = game.nightReports?.[`r${r}`] || [];
   }
+  reports[game.round] = report;
 
-  // Witch poison
-  if (poison) {
-    const target = players.find(p => p.id === poison.targetId);
-    if (target) {
-      const isProtected = protect && protect.targetId === poison.targetId;
-      if (!isProtected) {
-        updates[`players/${target.id}/eliminated`] = true;
-        updates[`players/${target.id}/actionSubmitted`] = false;
-      }
-    }
-  }
-
-  // Hunter shot
-  if (shoot) {
-    const target = players.find(p => p.id === shoot.targetId);
-    if (target) {
-      updates[`players/${target.id}/eliminated`] = true;
-      updates[`players/${target.id}/actionSubmitted`] = false;
-      updates[`players/${shoot.fromId}/actionUsed`] = true;
-    }
-  }
-
-  // Symbiote cascade: if any eliminated player has a bond partner, eliminate them too
-  if (game.symbiote) {
-    const { aId, bId } = game.symbiote;
-    if (updates[`players/${aId}/eliminated`]) updates[`players/${bId}/eliminated`] = true;
-    if (updates[`players/${bId}/eliminated`]) updates[`players/${aId}/eliminated`] = true;
-  }
-
-  // --- Generate GM script (using pre-kill player state so we can describe what happened) ---
-  const script = generateGmScript(game, thisRound, players);
-  updates.gmScript = script;
+  updates.gmScript = buildTownHallScript(game, updates, reports);
+  updates.phase = 'townhall';
+  updates.votes = null;
+  updates.ghostVotes = null;
 
   await fbUpdate(`games/${state.roomCode}`, updates);
-
-  // --- Check win condition after kills are applied ---
-  const updated = await fbGet(`games/${state.roomCode}`);
-  const allPlayers = getPlayerList(updated);
-  const result = checkWinCondition(allPlayers);
-  if (result === 'village') {
-    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'village' });
-  } else if (result === 'wolf') {
-    await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner: 'wolf' });
-  }
-
   toast('Town Hall called 🕯️');
+  switchGmTab('vote');
+  await endGameIfWon();
+  pollGame();
 };
 
-function generateGmScript(game, actions, players) {
-  // Resolve what actually happened this night
-  const distract = actions.find(a => a.type === 'distract');
-  const protect = actions.find(a => a.type === 'protect');
-  const heal = actions.find(a => a.type === 'heal');   // witch heal
-  const poison = actions.find(a => a.type === 'poison'); // witch poison
-  const killAction = actions.find(a => a.type === 'kill');
-  const shoot = actions.find(a => a.type === 'shoot');
-  const bond = actions.find(a => a.type === 'bond');
-
-  // Was the killer distracted?
-  const killerDistracted = killAction && distract && distract.targetId === killAction.fromId;
-
-  // Determine kill target (after distract/protect/heal)
-  let killed = null; // player who actually dies from wolf kill
-  let savedMessage = null;
-
-  if (killAction && !killerDistracted) {
-    const target = players.find(p => p.id === killAction.targetId);
-    if (target) {
-      const isProtected = protect && protect.targetId === killAction.targetId;
-      const isHealed = heal && heal.targetId === killAction.targetId;
-      const isTank = target.role === 'tank';
-      const isWounded = target.wounded;
-
-      if (isProtected || isHealed) {
-        savedMessage = `The Doctor watched over ${target.name} last night — the attack came, but ${target.name} was saved.`;
-      } else if (isTank && !isWounded) {
-        savedMessage = `${target.name} was attacked in the night — but they survived. They are wounded and will not survive another attack.`;
-        // GM should mark as wounded — remind them
-      } else {
-        killed = target;
-      }
-    }
-  }
-
-  // Witch poison — always kills unless also protected (edge case)
-  let poisoned = null;
-  if (poison) {
-    const target = players.find(p => p.id === poison.targetId);
-    if (target) {
-      const isProtected = protect && protect.targetId === poison.targetId;
-      if (!isProtected) poisoned = target;
-    }
-  }
-
-  // Hunter shot
-  let shot = null;
-  if (shoot) {
-    const target = players.find(p => p.id === shoot.targetId);
-    if (target) shot = target;
-  }
-
-  // Symbiote bond formed this night
-  let bondFormed = null;
-  if (bond) bondFormed = bond;
-
-  // --- Build the script ---
+function buildTownHallScript(game, updates, reports) {
+  const rounds = Object.keys(reports).map(Number).sort((a, b) => a - b);
   const lines = [];
-  lines.push(`"Gather round, villagers. The sun has risen on Night ${game.round}."`);
+  lines.push(rounds.length > 1
+    ? `"Gather round, villagers. The sun has risen after ${rounds.length} long nights."`
+    : `"Gather round, villagers. The sun has risen on Night ${game.round}."`);
   lines.push('');
 
-  // Deaths
-  const deaths = [];
-  if (killed) deaths.push(killed.name);
-  if (poisoned && poisoned.name !== killed?.name) deaths.push(poisoned.name);
-  if (shot) deaths.push(shot.name);
+  rounds.forEach(r => {
+    if (rounds.length > 1) lines.push(`[Night ${r}]`);
+    lines.push(...reports[r], '');
+  });
 
-  // Remove duplicates
-  const uniqueDeaths = [...new Set(deaths)];
+  const reminders = [];
+  const bard = updates.bardDoubled || game.bardDoubled;
+  if (bard) reminders.push(`[NOTE: ${bard.name}'s vote counts double this Town Hall.]`);
+  const sg = updates.scapegoatRedirect || game.scapegoatRedirect;
+  if (sg) reminders.push(`[NOTE: Scapegoat — votes against ${sg.fromName} count against ${sg.toName} instead. The vote tracker applies this.]`);
+  const jester = getPlayerList(game).find(p => p.role === 'jester' && !p.eliminated && !updates[`players/${p.id}/eliminated`]);
+  if (jester) reminders.push(`[REMINDER: ${jester.name} is the Jester — if they are voted out, they win. Don't reveal this.]`);
+  if (reminders.length) lines.push(...reminders, '');
 
-  if (uniqueDeaths.length === 0 && !savedMessage) {
-    lines.push('"The village woke peacefully. Nobody was killed last night."');
-  } else {
-    if (savedMessage) {
-      lines.push(`"${savedMessage}"`);
-    }
-    if (uniqueDeaths.length === 1) {
-      lines.push(`"Tragically, we found ${uniqueDeaths[0]} this morning. They did not survive the night."`);
-      // Reveal role
-      const deadP = players.find(p => p.name === uniqueDeaths[0]);
-      if (deadP) lines.push(`[Reveal ${uniqueDeaths[0]}'s role: ${ROLES[deadP.role]?.name || deadP.role}]`);
-    } else if (uniqueDeaths.length > 1) {
-      lines.push(`"A grim morning. We found ${uniqueDeaths.slice(0,-1).join(', ')} and ${uniqueDeaths.slice(-1)[0]} dead."`);
-      uniqueDeaths.forEach(name => {
-        const deadP = players.find(p => p.name === name);
-        if (deadP) lines.push(`[Reveal ${name}'s role: ${ROLES[deadP.role]?.name || deadP.role}]`);
-      });
-    }
-  }
-
-  // Tank wounded reminder
-  if (killAction && !killerDistracted) {
-    const t = players.find(p => p.id === killAction.targetId);
-    if (t?.role === 'tank' && !t?.wounded) {
-      lines.push('');
-      lines.push(`[ACTION REQUIRED: Mark ${t.name} as Wounded in the Players tab]`);
-      lines.push(`"${t.name} looks pale this morning — but they are still standing. For now."`);
-    }
-  }
-
-  // Symbiote bond
-  if (bondFormed) {
-    lines.push('');
-    lines.push(`[NOTE: Symbiote bond formed between ${bondFormed.fromName} and ${bondFormed.targetName}. If either dies, eliminate both.]`);
-  }
-
-  // Jester check
-  const jester = players.find(p => p.role === 'jester' && !p.eliminated);
-  if (jester) {
-    lines.push('');
-    lines.push(`[REMINDER: ${jester.name} is the Jester — they win if voted out at Town Hall. Don't reveal this.]`);
-  }
-
-  lines.push('');
   lines.push('"Now — who do you suspect? The floor is open."');
-
   return lines.join('\n');
 }
+
+window.advanceToNight = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'townhall') return;
+
+  const updates = nextNightUpdates(game, {
+    lastTownHallRound: game.round,
+    votes: null,
+    ghostVotes: null,
+    bardDoubled: null,
+    scapegoatRedirect: null,
+    gmScript: null
+  });
+
+  await fbUpdate(`games/${state.roomCode}`, updates);
+  toast('Night phase started 🌙');
+  switchGmTab('players');
+  pollGame();
+};
 
 window.endGame = async function() {
   if (!confirm('End the game?')) return;
   await fbUpdate(`games/${state.roomCode}`, { phase: 'ended' });
+  pollGame();
 };
 
 function checkWinCondition(players) {
   const living = players.filter(p => !p.eliminated);
-  const wolves = living.filter(p => p.role === 'werewolf');
-  const villagers = living.filter(p => ROLES[p.role]?.team !== 'wolf');
+  const wolves = living.filter(p => ROLES[p.role]?.team === 'wolf').length;
 
-  if (wolves.length === 0) return 'village';
-  if (wolves.length >= villagers.length && living.length <= 5) return 'wolf';
+  if (wolves === 0) return 'village';
+  if (wolves >= living.length - wolves) return 'wolf';
   return null;
 }
 
@@ -2252,15 +2390,30 @@ window.adjustRole = function(key, delta) {
 };
 
 function updateRoleTotal() {
+  const el = document.getElementById('role-total');
   const total = Object.values(roleConfig).reduce((s,v)=>s+v,0);
-  // Could show total vs player count
+  const players = state.gameData ? getPlayerList(state.gameData).length : 0;
+  const wolves = roleConfig.werewolf || 0;
+  const ready = total === players && wolves > 0;
+  let msg = `${total} role(s) for ${players} player(s)`;
+  if (wolves === 0) msg += ' — add at least one Werewolf';
+  else if (total < players) msg += ` — add ${players - total} more`;
+  else if (total > players) msg += ` — remove ${total - players}`;
+  else msg += ' ✓';
+  el.className = `info-box mt-16 ${ready ? 'success' : 'warning'}`;
+  el.textContent = msg;
 }
 
 window.assignRolesAndStart = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
+  if (!game) return;
+  if (game.phase !== 'lobby') { toast('The game has already started'); return; }
+
   const players = getPlayerList(game);
   const total = Object.values(roleConfig).reduce((s,v)=>s+v,0);
 
+  if (!players.length) { toast('Wait for players to join first'); return; }
+  if (!roleConfig.werewolf) { toast('Add at least one Werewolf'); return; }
   if (total !== players.length) {
     toast(`Role total (${total}) must equal player count (${players.length})`, 4000);
     return;
@@ -2278,26 +2431,22 @@ window.assignRolesAndStart = async function() {
     [pool[i],pool[j]] = [pool[j],pool[i]];
   }
 
-  const updates = { phase: 'night', round: 1 };
+  const updates = { phase: 'night', round: 1, lastTownHallRound: 0, roundsPerTownHall: state.gmRoundCount };
   players.forEach((p, i) => {
     updates[`players/${p.id}/role`] = pool[i];
+    if (pool[i] === 'mayor') updates[`players/${p.id}/mayorRevealed`] = true;
   });
 
-  // If mayor in pool, log it
-  const mayorPlayer = players.find((p,i) => pool[i] === 'mayor');
-  if (mayorPlayer) {
-    updates[`players/${mayorPlayer.id}/mayorRevealed`] = true;
-  }
-
-  // Hairy villager — werewolves will see them
   await fbUpdate(`games/${state.roomCode}`, updates);
   switchGmTab('players');
   toast('Roles assigned! Night begins 🌙');
+  pollGame();
 };
 
 window.adjustRounds = function(delta) {
   state.gmRoundCount = Math.max(1, Math.min(10, state.gmRoundCount + delta));
   document.getElementById('rounds-display').textContent = state.gmRoundCount;
+  if (state.roomCode) fbUpdate(`games/${state.roomCode}`, { roundsPerTownHall: state.gmRoundCount });
 };
 
 // ============================================================
@@ -2317,14 +2466,13 @@ window.switchGmTab = function(tab) {
 
 initStars();
 
-// Make window-level references for inline handlers
-window.toggleRoleCard = window.toggleRoleCard;
-
 // Handle URL params for direct joining
 const params = new URLSearchParams(window.location.search);
 if (params.get('room')) {
   document.getElementById('joinCode').value = params.get('room').toUpperCase();
 }
+
+restoreSession();
 </script>
 </body>
 </html>
