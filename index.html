@@ -727,27 +727,11 @@
     cursor: pointer;
   }
 
-  .round-tracker {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    margin-bottom: 16px;
-  }
-
-  .round-dot {
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    background: rgba(201,168,76,0.2);
-    border: 1px solid rgba(201,168,76,0.4);
-    transition: background 0.3s;
-  }
-
-  .round-dot.complete { background: var(--gold); }
-  .round-dot.current { background: var(--blood); border-color: #FF8080; animation: pulsedot 1s ease-in-out infinite; }
-
-  @keyframes pulsedot {
-    0%, 100% { opacity: 1; } 50% { opacity: 0.5; }
-  }
+  /* GM lobby: only the room code and role setup until roles are dealt */
+  #screen-gm.gm-lobby #gm-phase-banner,
+  #screen-gm.gm-lobby .gm-tabs,
+  #screen-gm.gm-lobby .gm-panel { display: none; }
+  #screen-gm.gm-lobby #panel-setup { display: block; }
 
   .symbiote-warning {
     background: rgba(40,80,40,0.2);
@@ -877,7 +861,6 @@
       <button class="gm-tab active" onclick="switchGmTab('players')" id="tab-players">Players</button>
       <button class="gm-tab" onclick="switchGmTab('actions')" id="tab-actions">Actions</button>
       <button class="gm-tab" onclick="switchGmTab('vote')" id="tab-vote">Town Hall</button>
-      <button class="gm-tab" onclick="switchGmTab('setup')" id="tab-setup">Setup</button>
     </div>
 
     <!-- GM: Players Tab -->
@@ -924,29 +907,20 @@
       </div>
     </div>
 
-    <!-- GM: Setup Tab -->
+    <!-- GM: Lobby (room code + role setup, shown until roles are dealt) -->
     <div class="gm-panel" id="panel-setup">
+      <div class="card text-center">
+        <div class="label">Room Code</div>
+        <div class="room-code" id="gm-lobby-code">----</div>
+        <p class="text-mist" id="gm-lobby-players">Waiting for players to join…</p>
+      </div>
+
       <div class="card">
         <h2>Role Setup</h2>
         <p class="text-mist text-small" style="margin-bottom:12px">Configure which roles to include. Roles are assigned randomly when you start the game.</p>
         <div id="role-setup-controls"></div>
         <div class="info-box mt-16" id="role-total"></div>
         <button class="btn btn-gold" id="assign-roles-btn" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
-      </div>
-
-      <div class="card">
-        <h2>Round Settings</h2>
-        <div class="toggle-row">
-          <div>
-            <div class="toggle-label">Rounds before Town Hall</div>
-            <div class="toggle-sub">3 for &lt;13, 4 for 13–20, 5 for 20+</div>
-          </div>
-          <div class="count-control">
-            <button class="count-btn" onclick="adjustRounds(-1)">−</button>
-            <span class="count-val" id="rounds-display">3</span>
-            <button class="count-btn" onclick="adjustRounds(1)">+</button>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -982,7 +956,6 @@ let state = {
   gameData: null,
   pollInterval: null,
   lastHash: null,
-  gmRoundCount: 3,
   cardShown: false,
   phaseKey: null,
 };
@@ -1288,8 +1261,9 @@ function enterGame() {
   document.getElementById('leave-btn').style.display = 'block';
   if (state.isGM) {
     showScreen('gm');
+    document.getElementById('screen-gm').classList.add('gm-lobby');
     document.getElementById('gm-room-code-badge').textContent = state.roomCode;
-    document.getElementById('rounds-display').textContent = state.gmRoundCount;
+    document.getElementById('gm-lobby-code').textContent = state.roomCode;
     updateGmPhaseBanner('lobby');
     buildRoleSetup();
   } else {
@@ -1305,7 +1279,6 @@ async function restoreSession() {
   const game = await fbGet(`games/${saved.roomCode}`);
   if (game && (saved.isGM || game.players?.[saved.playerId])) {
     Object.assign(state, saved);
-    if (state.isGM) state.gmRoundCount = game.roundsPerTownHall || 3;
     enterGame();
   } else {
     // Couldn't load it — prefill the form so a player can rejoin by name
@@ -1343,8 +1316,6 @@ window.createGame = async function() {
   const gameData = {
     phase: 'lobby',
     round: 0,
-    roundsPerTownHall: state.gmRoundCount,
-    lastTownHallRound: 0,
     createdAt: Date.now()
   };
 
@@ -1933,6 +1904,15 @@ function formatScript(text) {
 function renderGm(game) {
   updateGmPhaseBanner(game.phase, game.round);
 
+  // Lobby shows just the room code and role setup
+  document.getElementById('screen-gm').classList.toggle('gm-lobby', game.phase === 'lobby');
+  if (game.phase === 'lobby') {
+    const names = getPlayerList(game).map(p => p.name);
+    document.getElementById('gm-lobby-players').textContent = names.length
+      ? `Joined (${names.length}): ${names.join(', ')}`
+      : 'Waiting for players to join…';
+  }
+
   if (game.phase === 'ended' && WIN_BANNER[game.winner]) {
     document.getElementById('gm-phase-banner').textContent = WIN_BANNER[game.winner];
   }
@@ -1986,23 +1966,13 @@ function renderGmPhaseControls(game) {
   let html = '';
 
   if (game.phase === 'lobby') {
-    html = `<p class="text-mist text-small" style="margin-bottom:10px">Go to Setup to assign roles first.</p>`;
+    html = '';
   } else if (game.phase === 'night') {
     const pending = pendingPlayers(game);
     const actionCount = getRoundActions(game).length;
-    const per = game.roundsPerTownHall || 3;
-    const nightsSince = game.round - (game.lastTownHallRound || 0);
-    const due = nightsSince >= per;
-    const dots = Array.from({ length: Math.max(per, nightsSince) }, (_, i) =>
-      `<div class="round-dot${i < nightsSince - 1 ? ' complete' : i === nightsSince - 1 ? ' current' : ''}"></div>`
-    ).join('');
-    const nextBtn = `<button class="btn ${due ? 'btn-secondary' : 'btn-primary'}" onclick="advanceToNextNight()">End Night → Start Night ${game.round + 1} 🌙</button>`;
-    const hallBtn = `<button class="btn ${due ? 'btn-gold' : 'btn-secondary'}" onclick="advanceToTownHall()">End Night → Call Town Hall 🕯️</button>`;
     html = `
-      <div class="round-tracker">${dots}</div>
-      <p class="text-center text-mist text-small" style="margin-bottom:12px">Night ${nightsSince} of ${per} before Town Hall${due ? ' — Town Hall is due' : ''}</p>
       <div class="info-box">${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}</div>
-      ${due ? hallBtn + nextBtn : nextBtn + hallBtn}
+      <button class="btn btn-gold" onclick="advanceToTownHall()">End Night → Call Town Hall 🕯️</button>
     `;
   } else if (game.phase === 'townhall') {
     html = `
@@ -2243,35 +2213,12 @@ function nextNightUpdates(game, updates) {
   return updates;
 }
 
-window.advanceToNextNight = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
-  if (!game || game.phase !== 'night' || !confirmPending(game)) return;
-
-  const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
-  updates[`nightReports/r${game.round}`] = report;
-  nextNightUpdates(game, updates);
-
-  await fbUpdate(`games/${state.roomCode}`, updates);
-  toast(`Night ${game.round + 1} begins 🌙`);
-  await endGameIfWon();
-  pollGame();
-};
-
 window.advanceToTownHall = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase !== 'night' || !confirmPending(game)) return;
 
   const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
-  updates[`nightReports/r${game.round}`] = report;
-
-  // Script covers every night since the last Town Hall
-  const reports = {};
-  for (let r = (game.lastTownHallRound || 0) + 1; r < game.round; r++) {
-    reports[r] = game.nightReports?.[`r${r}`] || [];
-  }
-  reports[game.round] = report;
-
-  updates.gmScript = buildTownHallScript(game, updates, reports);
+  updates.gmScript = buildTownHallScript(game, updates, report);
   updates.phase = 'townhall';
   updates.votes = null;
   updates.ghostVotes = null;
@@ -2283,18 +2230,8 @@ window.advanceToTownHall = async function() {
   pollGame();
 };
 
-function buildTownHallScript(game, updates, reports) {
-  const rounds = Object.keys(reports).map(Number).sort((a, b) => a - b);
-  const lines = [];
-  lines.push(rounds.length > 1
-    ? `"Gather round, villagers. The sun has risen after ${rounds.length} long nights."`
-    : `"Gather round, villagers. The sun has risen on Night ${game.round}."`);
-  lines.push('');
-
-  rounds.forEach(r => {
-    if (rounds.length > 1) lines.push(`[Night ${r}]`);
-    lines.push(...reports[r], '');
-  });
+function buildTownHallScript(game, updates, report) {
+  const lines = [`"Gather round, villagers. The sun has risen on Night ${game.round}."`, '', ...report, ''];
 
   const reminders = [];
   const bard = updates.bardDoubled || game.bardDoubled;
@@ -2314,7 +2251,6 @@ window.advanceToNight = async function() {
   if (!game || game.phase !== 'townhall') return;
 
   const updates = nextNightUpdates(game, {
-    lastTownHallRound: game.round,
     votes: null,
     ghostVotes: null,
     bardDoubled: null,
@@ -2425,7 +2361,7 @@ window.assignRolesAndStart = async function() {
     [pool[i],pool[j]] = [pool[j],pool[i]];
   }
 
-  const updates = { phase: 'night', round: 1, lastTownHallRound: 0, roundsPerTownHall: state.gmRoundCount };
+  const updates = { phase: 'night', round: 1 };
   players.forEach((p, i) => {
     updates[`players/${p.id}/role`] = pool[i];
     if (pool[i] === 'mayor') updates[`players/${p.id}/mayorRevealed`] = true;
@@ -2435,12 +2371,6 @@ window.assignRolesAndStart = async function() {
   switchGmTab('players');
   toast('Roles assigned! Night begins 🌙');
   pollGame();
-};
-
-window.adjustRounds = function(delta) {
-  state.gmRoundCount = Math.max(1, Math.min(10, state.gmRoundCount + delta));
-  document.getElementById('rounds-display').textContent = state.gmRoundCount;
-  if (state.roomCode) fbUpdate(`games/${state.roomCode}`, { roundsPerTownHall: state.gmRoundCount });
 };
 
 // ============================================================
