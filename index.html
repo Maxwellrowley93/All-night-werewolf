@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>All Night Werewolf</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
 
 <style>
   :root {
@@ -137,7 +137,6 @@
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 16px;
-    backdrop-filter: blur(8px);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(201,168,76,0.1);
   }
 
@@ -657,6 +656,154 @@
 
   .flex-col { display: flex; flex-direction: column; gap: 8px; }
 
+  /* Where the game has got to, the same on every player's phone */
+  .phase-bar { display: flex; margin-bottom: 8px; pointer-events: none; }
+  .phase-step {
+    position: relative;
+    flex: 1;
+    padding-top: 13px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--mist);
+  }
+  .phase-step::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 50%;
+    z-index: 1;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    border-radius: 50%;
+    background: var(--shadow);
+    border: 1px solid var(--mist);
+  }
+  .phase-step:not(:first-child)::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 50%;
+    width: 100%;
+    height: 1px;
+    background: var(--mist);
+    opacity: 0.5;
+  }
+  .phase-step.done { color: var(--moon); }
+  .phase-step.done::before { background: var(--moon); border-color: var(--moon); }
+  .phase-step.done::after, .phase-step.current:not(:first-child)::after { background: var(--moon); opacity: 1; }
+  .phase-step.current { color: var(--gold); font-weight: 600; }
+  .phase-step.current::before { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 6px var(--gold); }
+
+  /* Town Hall: the call to gather */
+  .gather-alert {
+    text-align: center;
+    padding: 20px 16px;
+    margin-bottom: 12px;
+    border: 2px solid var(--gold);
+    border-radius: 10px;
+    background: rgba(201,168,76,0.12);
+    animation: gather-pulse 1.6s ease-in-out infinite;
+  }
+  .gather-alert .gather-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 22px;
+    color: var(--moon);
+    margin-bottom: 6px;
+  }
+  @keyframes gather-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.4); }
+    50% { box-shadow: 0 0 22px 4px rgba(201,168,76,0.4); }
+  }
+
+  /* Town Hall: each player's blackboard fills the screen, sideways, with only a name on it */
+  #slate-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    overflow: hidden;
+    background: #111;
+  }
+  #slate-screen.show { display: block; }
+  .slate-board {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #F4F1E6;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    font-size: min(calc(170vmax / var(--chars)), 55vmin);
+    text-shadow: 0 0 3px rgba(244,241,230,0.8), 2px 2px 6px rgba(244,241,230,0.25);
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.09), transparent 55%),
+      radial-gradient(ellipse at 75% 80%, rgba(255,255,255,0.05), transparent 50%),
+      #262B28;
+    border: 3vmin solid #6B4A2B;
+    box-shadow: inset 0 0 8vmin rgba(0,0,0,0.6);
+    animation: slate-fade 0.5s ease-out;
+  }
+  @media (orientation: portrait) {
+    .slate-board {
+      width: 100vh;
+      width: 100dvh;
+      height: 100vw;
+      transform: translate(-50%, -50%) rotate(90deg);
+    }
+  }
+  @keyframes slate-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* The Game Master's overview of every slate */
+  .chalkboard {
+    min-width: 0;
+    text-align: center;
+    color: #F4F1E6;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    background: #262B28;
+    border: 2px solid #6B4A2B;
+    border-radius: 4px;
+    padding: 1px 4px;
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+  }
+  .chalkboard .slate-from { display: block; font-size: 14px; opacity: 0.75; }
+  .chalkboard .slate-name { display: block; font-size: 19px; font-weight: 700; }
+  .tally { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+  /* Yes/no questions, drawn in the page so they work in every browser */
+  #confirm-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0,0,0,0.7);
+  }
+  #confirm-modal.show { display: flex; }
+  .confirm-box {
+    width: 100%;
+    max-width: 360px;
+    padding: 20px;
+    background: var(--shadow);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+  }
+  #confirm-message { white-space: pre-line; margin-bottom: 14px; line-height: 1.4; }
+
   .text-center { text-align: center; }
   .text-mist { color: var(--mist); }
   .text-gold { color: var(--gold); }
@@ -760,6 +907,97 @@
     font-style: normal;
     font-size: 13px;
   }
+
+  /* In the game nothing should need scrolling: drop the header and tighten everything.
+     fitScreen() shrinks whatever is still too tall for the phone. */
+  #app.in-game { min-height: 0; padding: 6px 8px; }
+  #app.in-game .moon-header { display: none; }
+  #app.in-game .card { padding: 8px; margin-bottom: 6px; }
+  #app.in-game h2 { font-size: 13px; margin-bottom: 6px; }
+  #app.in-game h3 { margin-bottom: 4px; }
+  #app.in-game .phase-banner { padding: 6px; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.04em; }
+  #app.in-game .info-box { padding: 5px 8px; margin-bottom: 6px; font-size: 13px; line-height: 1.3; }
+  #app.in-game .divider { margin: 6px 0; }
+  #app.in-game .btn { padding: 10px 8px; font-size: 12px; letter-spacing: 0.03em; }
+  #app.in-game .btn + .btn { margin-top: 6px; }
+  #app.in-game .mt-16 { margin-top: 6px; }
+  #app.in-game .room-code { font-size: 28px; padding: 0; }
+  #app.in-game .player-list,
+  .compact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  #app.in-game .player-row { padding: 3px 8px; }
+  #app.in-game .player-name { font-size: 14px; }
+  #app.in-game .player-role-badge { padding: 1px 4px; font-size: 8px; }
+  #app.in-game .vote-count { font-size: 15px; }
+  #app.in-game .submitted-banner { padding: 8px; font-size: 14px; }
+  #app.in-game .gather-alert { padding: 10px; margin-bottom: 6px; }
+  #app.in-game .gather-title { font-size: 18px; margin-bottom: 2px; }
+
+  #app.in-game .role-reveal-card { padding: 8px 10px; border-radius: 10px; box-shadow: none; }
+  #app.in-game .role-reveal-back { flex-direction: row; justify-content: center; gap: 8px; }
+  #app.in-game .role-reveal-back .eye-icon { font-size: 22px; }
+  #app.in-game .role-reveal-back h3 { margin: 0; white-space: nowrap; }
+  #app.in-game .role-reveal-back p { font-size: 12px; line-height: 1.15; }
+  /* A big card to tap, except while voting when the names need the room */
+  #app.in-game .role-reveal-card.tall:not(.role-card-shown) .role-reveal-back { min-height: 60vh; flex-direction: column; gap: 14px; }
+  #app.in-game .role-reveal-card.tall .eye-icon { font-size: 64px; }
+  #app.in-game .role-reveal-card.tall .role-reveal-back h3 { font-size: 18px; }
+  #app.in-game .role-reveal-card.tall .role-reveal-back p { font-size: 15px; line-height: 1.4; }
+  #app.in-game .role-reveal-front .role-name { font-size: 18px; margin-bottom: 2px; }
+  #app.in-game .role-reveal-front .role-desc { font-size: 13px; line-height: 1.25; margin-bottom: 2px; }
+  #app.in-game .role-reveal-front .role-desc:empty { display: none; }
+  #app.in-game .role-reveal-front .role-ability { font-size: 14px; line-height: 1.25; padding-top: 4px; margin-top: 2px; }
+  #app.in-game .werewolf-partners { padding: 4px 8px; margin-top: 4px; font-size: 13px; }
+  #app.in-game .werewolf-partners .partners-label { margin-bottom: 2px; }
+
+  #app.in-game .player-actions-grid { gap: 4px; margin-top: 4px; }
+  #app.in-game .action-card { padding: 7px 4px; overflow-wrap: anywhere; }
+  #app.in-game .action-card .action-name { font-family: 'Crimson Pro', Georgia, serif; font-size: 15px; font-weight: 600; line-height: 1.1; }
+  #app.in-game .separator { margin: 4px 0; }
+
+  #app.in-game .gm-tabs { margin-bottom: 6px; padding: 2px; }
+  #app.in-game .gm-tab { padding: 6px 2px; font-size: 10px; }
+  #gm-phase-controls h2 { display: none; }
+  .gm-player-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 3px 4px 3px 6px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(201,168,76,0.12);
+    border-radius: 6px;
+  }
+  .gm-player-cell.ghost-card { opacity: 0.6; border-color: rgba(106,138,170,0.25); }
+  .gm-player-cell .cell-text { flex: 1; min-width: 0; }
+  .gm-player-cell .player-name { display: block; line-height: 1.15; }
+  .gm-x {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    color: #FFB0B0;
+    background: rgba(139,26,26,0.4);
+    border: 1px solid rgba(255,100,100,0.3);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  #app.in-game .gm-script-box { padding: 6px 8px; font-size: 14px; line-height: 1.3; }
+  #app.in-game .resolution-step { padding: 3px 6px; margin-bottom: 3px; font-size: 13px; line-height: 1.25; }
+  #app.in-game .action-item { padding: 4px 8px; }
+  #app.in-game .action-item .action-text { font-size: 13px; line-height: 1.2; }
+  #app.in-game .action-item .action-time { display: none; }
+  #app.in-game .action-inbox { gap: 3px; }
+
+  .role-setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+  #app.in-game .toggle-row { display: block; padding: 2px 0; }
+  #app.in-game .toggle-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #app.in-game .count-control { gap: 4px; }
+  #app.in-game .count-btn { width: 30px; height: 26px; }
+  #app.in-game .count-val { font-size: 15px; min-width: 22px; }
+
+  #app.in-game #leave-btn { margin-top: 2px; padding: 4px 10px; font-size: 9px; }
+
+  /* Test windows: many copies run at once, so skip the decoration */
+  html.test-seat *, html.test-seat *::before { animation: none !important; }
 </style>
 </head>
 <body>
@@ -797,7 +1035,7 @@
     <div class="card">
       <div class="phase-banner phase-lobby">⏳ Waiting for the Game Master…</div>
       <h2 id="lobby-player-greeting">Welcome</h2>
-      <div class="info-box">You're in the village. The Game Master will assign roles shortly. Keep your phone ready — your role card will appear here and must be kept secret.</div>
+      <div class="info-box">You're in the village. Your secret role will appear here when the Game Master starts.</div>
       <div class="label mt-8">Players in the village</div>
       <div class="player-list" id="lobby-player-list"></div>
     </div>
@@ -806,49 +1044,49 @@
   <!-- ====== PLAYER ROLE SCREEN ====== -->
   <div class="screen" id="screen-player-role">
     <div class="card">
-      <div class="phase-banner phase-night" id="player-phase-banner">🌙 Night has fallen…</div>
-      <div class="info-box" id="player-status-box">The night is active. Complete your action if you have one, then mingle.</div>
+      <div class="phase-bar" id="player-phase-bar"></div>
+      <div class="info-box" id="player-status-box" style="display:none"></div>
       <div class="info-box" id="mayorBox" style="display:none"></div>
+
+      <!-- Town Hall: gather call, ballot and chalk slate -->
+      <div id="playerTownHallArea" style="display:none"></div>
 
       <!-- Role Card -->
       <div class="role-reveal-card" id="roleCard" onclick="toggleRoleCard()">
         <div class="role-reveal-back">
           <div class="eye-icon">🃏</div>
           <h3 style="color:var(--moon)">Your Role</h3>
-          <p>Tap to reveal · tap again to hide<br>Make sure no one is watching</p>
+          <p>Tap to see your role and action, tap again to hide<br>Make sure no one is watching</p>
         </div>
         <div class="role-reveal-front" id="roleCardFront">
           <div class="role-name" id="playerRoleName"></div>
           <div class="role-desc" id="playerRoleDesc"></div>
           <div class="role-ability" id="playerRoleAbility"></div>
+          <!-- Werewolf partners -->
+          <div class="werewolf-partners" id="wolfPartnersBox" style="display:none">
+            <div class="partners-label">🐺 Your Pack</div>
+            <div id="wolfPartnersList"></div>
+          </div>
+
+          <!-- Seer result -->
+          <div id="playerSeerResult" style="display:none">
+            <hr class="divider">
+            <h3>🔮 Visions</h3>
+            <div id="playerSeerResultContent"></div>
+          </div>
+
+          <!-- Action area: tapping a choice here must not flip the card -->
+          <div id="playerActionArea" style="display:none" onclick="event.stopPropagation()">
+            <hr class="divider">
+            <div id="playerActionContent"></div>
+          </div>
         </div>
       </div>
 
-      <!-- Werewolf partners -->
-      <div class="werewolf-partners" id="wolfPartnersBox" style="display:none">
-        <div class="partners-label">🐺 Your Pack</div>
-        <div id="wolfPartnersList"></div>
-      </div>
-
-      <!-- Seer result -->
-      <div id="playerSeerResult" style="display:none">
-        <hr class="divider">
-        <h3>🔮 Visions</h3>
-        <div id="playerSeerResultContent"></div>
-      </div>
-
-      <!-- Action area -->
-      <div id="playerActionArea" style="display:none">
-        <hr class="divider">
-        <h3>Your Nightly Action</h3>
-        <div id="playerActionContent"></div>
-      </div>
-
-      <!-- Ghost voting area -->
+      <!-- Ghost notice -->
       <div id="playerGhostArea" style="display:none">
         <hr class="divider">
-        <div class="info-box blue">👻 You are a Ghost. You may vote on who to eliminate at the start of Town Hall.</div>
-        <div id="ghostVoteContent"></div>
+        <div class="info-box blue">👻 You are a Ghost. You have no night action, but you have one final vote. Use it at any Town Hall, or save it for later.</div>
       </div>
     </div>
   </div>
@@ -883,7 +1121,7 @@
     <div class="gm-panel" id="panel-actions">
       <div class="card">
         <h2>Night Actions</h2>
-        <p class="text-mist text-small" style="margin-bottom:12px">Actions submitted by players this round. Resolution order is shown below.</p>
+        
         <div id="gm-action-inbox" class="action-inbox"></div>
       </div>
       <div class="card">
@@ -894,16 +1132,16 @@
 
     <!-- GM: Town Hall Tab -->
     <div class="gm-panel" id="panel-vote">
-      <div class="card">
+      <div class="card" id="gm-script-card">
         <h2>📜 GM Script</h2>
-        <p class="text-mist text-small" style="margin-bottom:10px">Read this aloud to open Town Hall. Generated from night actions.</p>
+        <p class="text-mist text-small" style="margin-bottom:10px">Read this aloud once everyone has gathered. Generated from night actions.</p>
         <div id="gm-script-box" class="gm-script-box">No script yet — call Town Hall from the Players tab to generate.</div>
       </div>
       <div class="card">
         <h2>Town Hall</h2>
-        <div id="ghost-vote-result" class="info-box blue" style="display:none"></div>
-        <div id="gm-vote-list"></div>
-        <div id="gm-vote-controls" class="mt-8"></div>
+        <div id="gm-vote-notes" class="info-box blue" style="display:none"></div>
+        <div id="gm-vote-controls"></div>
+        <div id="gm-vote-list" class="mt-8"></div>
       </div>
     </div>
 
@@ -917,9 +1155,9 @@
 
       <div class="card">
         <h2>Role Setup</h2>
-        <p class="text-mist text-small" style="margin-bottom:12px">Configure which roles to include. Roles are assigned randomly when you start the game.</p>
-        <div id="role-setup-controls"></div>
-        <div class="info-box mt-16" id="role-total"></div>
+        
+        <div id="role-setup-controls" class="role-setup-grid"></div>
+        <div class="info-box mt-8" id="role-total"></div>
         <button class="btn btn-gold" id="assign-roles-btn" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
       </div>
     </div>
@@ -930,6 +1168,16 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div id="slate-screen"></div>
+
+<div id="confirm-modal">
+  <div class="confirm-box">
+    <p id="confirm-message"></p>
+    <button class="btn btn-gold" id="confirm-yes">OK</button>
+    <button class="btn btn-secondary mt-8" id="confirm-no">Cancel</button>
+  </div>
+</div>
 
 <script type="module">
 // ============================================================
@@ -1012,106 +1260,92 @@ async function fbPush(path, data) {
 const ROLES = {
   werewolf: {
     name: 'Werewolf', team: 'wolf', emoji: '🐺',
-    desc: 'The cunning and bloodthirsty Werewolf.',
-    ability: 'Each night, every werewolf makes their own kill. Team up on one target to get past a Doctor, a healing potion or a Tank.',
+    ability: 'Kill one player. Team up to beat protection.',
     hasAction: true, actionType: 'kill',
     cssClass: 'role-werewolf'
   },
   villager: {
     name: 'Villager', team: 'village', emoji: '🏡',
-    desc: 'The ordinary, yet essential, resident of the village.',
-    ability: 'You have no special ability. Use your wits and social skills to root out the Werewolves at Town Hall.',
+    ability: 'Find the wolves and vote them out.',
     hasAction: false,
     cssClass: 'role-villager'
   },
   seer: {
     name: 'Seer', team: 'village', emoji: '🔮',
-    desc: 'A wise individual with the ability to see through deception.',
-    ability: 'Each night, choose a player to inspect. When the night ends, your phone shows whether they are a Werewolf.',
+    ability: 'Pick a player. At dawn, learn if they\'re a Werewolf.',
     hasAction: true, actionType: 'inspect',
     cssClass: 'role-seer'
   },
   doctor: {
     name: 'Doctor', team: 'village', emoji: '⚕️',
-    desc: 'A skilled healer devoted to protecting the innocent.',
-    ability: 'Each night, protect one player (or yourself). Your protection cancels one attack on them — a wolf kill or poison. Two wolves on the same target will still get through.',
+    ability: 'Protect one player from one attack.',
     hasAction: true, actionType: 'protect',
     cssClass: 'role-doctor'
   },
   witch: {
     name: 'Witch', team: 'village', emoji: '🧙',
-    desc: 'A mysterious figure with ancient knowledge of potions.',
-    ability: 'You have two one-use potions: a Healing Potion (cancels one wolf attack on that player tonight) and a Poison Potion (eliminate any player). One potion per night.',
+    ability: 'Heal cancels one wolf attack. Poison kills. One use each.',
     hasAction: true, actionType: 'potion',
     cssClass: 'role-witch'
   },
   hunter: {
     name: 'Hunter', team: 'village', emoji: '🎯',
-    desc: 'Get that wolf.',
-    ability: 'Once per game, during the night, fire your silver bullet at one player. Nothing can save them.',
+    ability: 'One silver bullet, once per game. Nothing stops it.',
     hasAction: true, actionType: 'shoot',
     cssClass: 'role-hunter'
   },
   bard: {
     name: 'Bard', team: 'village', emoji: '🎵',
-    desc: 'A charismatic entertainer who uses the power of persuasion.',
-    ability: 'Once per game, choose a player during the night. Their vote counts double at the next Town Hall.',
+    ability: 'Once per game, make a player\'s next vote count double.',
     hasAction: true, actionType: 'double',
     cssClass: 'role-bard'
   },
   scapegoat: {
     name: 'Scapegoat', team: 'village', emoji: '🐐',
-    desc: 'A misunderstood villager who attracts suspicion.',
-    ability: 'Once per game, choose a player during the night. At the next Town Hall, every vote against them counts against you instead.',
+    ability: 'Once per game, votes against a player count against you instead.',
     hasAction: true, actionType: 'redirect',
     cssClass: 'role-scapegoat'
   },
   jester: {
     name: 'Jester', team: 'jester', emoji: '🃏',
-    desc: 'A mischievous trickster who thrives on chaos.',
-    ability: 'You win if you are eliminated at Town Hall. If alive when the game ends, you lose. Create confusion. Be suspicious. Get voted out.',
+    ability: 'Get voted out at Town Hall and you win alone.',
     hasAction: false,
     cssClass: 'role-jester'
   },
   seductress: {
     name: 'Seductress', team: 'village', emoji: '💋',
-    desc: 'A charming and alluring figure skilled in manipulation.',
-    ability: 'Each night, choose a player to distract. Whatever action they take that night has no effect.',
+    ability: 'Block one player\'s action tonight.',
     hasAction: true, actionType: 'distract',
     cssClass: 'role-seductress'
   },
   puppetmaster: {
     name: 'Puppetmaster', team: 'village', emoji: '🎭',
-    desc: 'A master manipulator who controls the actions of others.',
-    ability: 'Each night, choose a player to control and a new target for them. Their action hits your chosen target instead. If they have no action, nothing happens.',
+    ability: 'Send one player\'s action to a new target.',
     hasAction: true, actionType: 'control',
     cssClass: 'role-puppetmaster'
   },
   symbiote: {
     name: 'Symbiote', team: 'village', emoji: '🔗',
-    desc: 'A parasitic entity that can form alliances.',
-    ability: 'Once per game, bond with a player. From then on, if either of you is eliminated, both die.',
+    ability: 'Once per game, bond with a player. If one dies, both die.',
     hasAction: true, actionType: 'bond',
     cssClass: 'role-symbiote'
   },
   mayor: {
     name: 'Mayor', team: 'village', emoji: '⭐',
-    desc: 'A trustworthy official with a big target on their back.',
-    ability: 'Your role is revealed to everyone when the game starts. You are a known ally — and a known target.',
+    ability: 'Everyone knows your role. Stay alive.',
     hasAction: false,
     cssClass: 'role-mayor'
   },
   tank: {
     name: 'Tank', team: 'village', emoji: '🛡️',
-    desc: 'You can take a hit.',
-    ability: 'It takes two night attacks to kill you — on the same night or across nights. The first leaves you wounded (announced at Town Hall); the second kills you. A Town Hall vote still eliminates you outright.',
+    ability: 'You survive your first night attack.',
     hasAction: false,
     cssClass: 'role-tank'
   },
   hairy_villager: {
     name: 'Hairy Villager', team: 'village', emoji: '🧔',
     desc: 'Beard of the year, 4 years running.',
-    ability: 'You are a Villager — but the Werewolves believe you are one of their pack.',
+    ability: 'You\'re a Villager, but the wolves think you\'re one of them.',
     hasAction: false,
     cssClass: 'role-hairy'
   }
@@ -1175,7 +1409,25 @@ function esc(str) {
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
+  document.getElementById('app').classList.toggle('in-game', id !== 'landing');
+  fitScreen();
 }
+
+// Shrinks the page until it fits the screen, so nobody has to scroll to find a name or a button
+const MIN_FIT = 0.55;
+function fitScreen() {
+  // The on-screen keyboard shrinks the window while typing a name, and that shouldn't shrink the page
+  if (document.activeElement?.tagName === 'INPUT') return;
+  const app = document.getElementById('app');
+  let zoom = 1;
+  app.style.zoom = zoom;
+  while (document.documentElement.scrollHeight > window.innerHeight && zoom > MIN_FIT) {
+    zoom -= 0.03;
+    app.style.zoom = zoom;
+  }
+}
+window.addEventListener('resize', fitScreen);
+document.fonts?.ready.then(fitScreen);
 
 function toast(msg, duration=3000) {
   const el = document.getElementById('toast');
@@ -1205,6 +1457,62 @@ function getGhosts(game) {
 
 function getRoundActions(game) {
   return Object.values(game.actions || {}).filter(a => a && a.round === game.round);
+}
+
+// Asks a yes/no question inside the page. Browser pop-ups can be silently blocked, which would leave the button dead.
+function askConfirm(message) {
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-message').textContent = message;
+  modal.classList.add('show');
+  return new Promise(resolve => {
+    const answer = result => {
+      modal.classList.remove('show');
+      resolve(result);
+    };
+    document.getElementById('confirm-yes').onclick = () => answer(true);
+    document.getElementById('confirm-no').onclick = () => answer(false);
+  });
+}
+
+// Town Hall runs discussion → voting → reveal. Voting ends by itself once everyone has voted.
+function allVotesIn(game) {
+  return getVoters(game).every(p => game.votes?.[p.id]);
+}
+
+// A ghost has one final vote to use at a Town Hall of their choosing. A tiebreak at that same Town Hall still counts as part of it.
+function canVote(p, game) {
+  return !p.eliminated || !p.ghostVoteRound || p.ghostVoteRound === game.round;
+}
+
+function getVoters(game) {
+  return getPlayerList(game).filter(p => canVote(p, game));
+}
+
+function townHallStage(game) {
+  const stage = game.townHallStage || 'discussion';
+  return stage === 'voting' && allVotesIn(game) ? 'reveal' : stage;
+}
+
+// Weighs the votes: a Bard-doubled voter counts twice, and the Scapegoat takes votes against their chosen player
+function tallyVotes(game) {
+  const living = getLivingPlayers(game);
+  const totals = {};
+  living.forEach(p => { totals[p.id] = 0; });
+  const bard = game.bardDoubled;
+  Object.entries(game.votes || {}).forEach(([voterId, v]) => {
+    if (!(v.targetId in totals)) return;
+    const voterAlive = living.some(p => p.id === voterId);
+    totals[v.targetId] += bard && bard.id === voterId && voterAlive ? 2 : 1;
+  });
+  const sg = game.scapegoatRedirect;
+  const sgActive = !!sg && sg.toId in totals && sg.fromId in totals;
+  if (sgActive) {
+    totals[sg.toId] += totals[sg.fromId];
+    totals[sg.fromId] = 0;
+  }
+  const top = Math.max(0, ...Object.values(totals));
+  const leaders = living.filter(p => top > 0 && totals[p.id] === top);
+  return { totals, top, leaders, sgActive };
 }
 
 // Once-per-game abilities that have already been used
@@ -1238,7 +1546,10 @@ const WIN_BANNER = {
 // SESSION — remembers your game so a page refresh doesn't lose it
 // ============================================================
 
-const SESSION_KEY = 'allnight-werewolf-session';
+// ?seat= keeps a separate session per window, for the side-by-side test page (test.html)
+const seat = new URLSearchParams(window.location.search).get('seat');
+if (seat) document.documentElement.classList.add('test-seat');
+const SESSION_KEY = `allnight-werewolf-session${seat ? `-${seat}` : ''}`;
 
 function saveSession() {
   try {
@@ -1264,7 +1575,7 @@ function enterGame() {
     document.getElementById('screen-gm').classList.add('gm-lobby');
     document.getElementById('gm-room-code-badge').textContent = state.roomCode;
     document.getElementById('gm-lobby-code').textContent = state.roomCode;
-    updateGmPhaseBanner('lobby');
+    updateGmPhaseBanner({ phase: 'lobby' });
     buildRoleSetup();
   } else {
     document.getElementById('lobby-player-greeting').textContent = `Welcome, ${state.playerName}`;
@@ -1288,11 +1599,11 @@ async function restoreSession() {
   }
 }
 
-window.leaveGame = function() {
+window.leaveGame = async function() {
   const msg = state.isGM
     ? 'Leave this game? You will no longer be able to run it from this device.'
     : 'Leave this game? You can rejoin later with the same name and room code.';
-  if (!confirm(msg)) return;
+  if (!await askConfirm(msg)) return;
   clearInterval(state.pollInterval);
   clearSession();
   Object.assign(state, { roomCode: null, playerId: null, playerName: null, isGM: false, gameData: null, pollInterval: null, lastHash: null, phaseKey: null });
@@ -1343,7 +1654,7 @@ window.joinGame = async function() {
   const existing = getPlayerList(game).find(p => p.name.toLowerCase() === name.toLowerCase());
   if (existing) {
     // Same name already in the game — most likely the same person rejoining
-    if (!confirm(`Someone called ${existing.name} is already in this game.\n\nOK — that's me, rejoin as ${existing.name}\nCancel — I'll pick a different name`)) return;
+    if (!await askConfirm(`Someone called ${existing.name} is already in this game.\n\nOK — that's me, rejoin as ${existing.name}\nCancel — I'll pick a different name`)) return;
     playerId = existing.id;
     playerName = existing.name;
   } else if (game.phase !== 'lobby') {
@@ -1387,10 +1698,13 @@ async function pollGame() {
   state.gameData = game;
 
   // New night or Town Hall — forget any half-made selection from before
-  const phaseKey = `${game.phase}-${game.round}`;
+  const inTownHall = game.phase === 'townhall';
+  const phaseKey = `${game.phase}-${game.round}-${inTownHall ? townHallStage(game) : ''}`;
   if (phaseKey !== state.phaseKey) {
     state.phaseKey = phaseKey;
     pendingAction = { type: null };
+    hideRoleCard();
+    if (inTownHall && !state.isGM) navigator.vibrate?.(300);
   }
 
   if (state.isGM) {
@@ -1398,6 +1712,7 @@ async function pollGame() {
   } else {
     renderPlayer(game);
   }
+  fitScreen();
 }
 
 // ============================================================
@@ -1407,6 +1722,8 @@ async function pollGame() {
 function renderPlayer(game) {
   const me = game.players?.[state.playerId];
   if (!me) return;
+
+  renderSlateScreen(game, me);
 
   // Lobby phase
   if (game.phase === 'lobby') {
@@ -1420,14 +1737,15 @@ function renderPlayer(game) {
   // Role assigned — show role screen
   showScreen('player-role');
   const role = ROLES[me.role];
-  const banner = document.getElementById('player-phase-banner');
   const statusBox = document.getElementById('player-status-box');
   const actionArea = document.getElementById('playerActionArea');
   const ghostArea = document.getElementById('playerGhostArea');
+  const townHallArea = document.getElementById('playerTownHallArea');
 
   document.getElementById('playerRoleName').textContent = `${role?.emoji || ''} ${role?.name || me.role}`;
   document.getElementById('playerRoleDesc').textContent = role?.desc || '';
-  document.getElementById('playerRoleAbility').textContent = '⚡ ' + (role?.ability || '');
+  document.getElementById('playerRoleAbility').textContent = (role?.ability || '') +
+    (me.wounded && !me.eliminated ? ' 🩹 Wounded: one more attack kills you.' : '');
 
   // Werewolf pack — includes any Hairy Villager, sorted so they can't be told apart
   const wolfBox = document.getElementById('wolfPartnersBox');
@@ -1467,49 +1785,50 @@ function renderPlayer(game) {
     seerArea.style.display = 'none';
   }
 
+  renderPhaseBar(game);
+  const votingNow = game.phase === 'townhall' && townHallStage(game) === 'voting';
+  document.getElementById('roleCard').classList.toggle('tall', !votingNow);
+
   // Game over
+  statusBox.style.display = game.phase === 'ended' ? 'block' : 'none';
   if (game.phase === 'ended') {
-    banner.className = 'phase-banner phase-lobby';
-    banner.textContent = '🏁 The game is over';
     statusBox.innerHTML = WIN_TEXT[game.winner] || 'The game has ended.';
     actionArea.style.display = 'none';
     ghostArea.style.display = 'none';
+    townHallArea.style.display = 'none';
     return;
   }
 
-  // Phase banner
-  if (game.phase === 'night') {
-    banner.className = 'phase-banner phase-night';
-    banner.textContent = `🌙 Night ${game.round} — mingle, scheme, act…`;
-    statusBox.textContent = me.eliminated ? 'You are a ghost. Haunt wisely.'
-      : !role?.hasAction ? 'You have no night action. Mingle, listen, and watch for wolves.'
-      : me.actionSubmitted ? "You're done for tonight. Mingle."
-      : 'Submit your nightly action below.';
-  } else if (game.phase === 'townhall') {
-    banner.className = 'phase-banner phase-townhall';
-    banner.textContent = `🕯️ Town Hall — after Night ${game.round}`;
-    statusBox.textContent = me.eliminated
-      ? 'You are a ghost. Cast your ghost vote below.'
-      : 'Discuss, debate, then cast your vote with the Game Master.';
-  }
-  if (me.wounded && !me.eliminated) statusBox.textContent += ' 🩹 You are wounded — one more attack will kill you.';
+  // Town Hall — everyone votes, ghosts included
+  townHallArea.style.display = game.phase === 'townhall' ? 'block' : 'none';
+  if (game.phase === 'townhall') renderTownHallArea(game, me);
 
   // Ghost
   if (me.eliminated) {
     ghostArea.style.display = 'block';
-    renderGhostVoteArea(game);
     actionArea.style.display = 'none';
     return;
   }
   ghostArea.style.display = 'none';
 
-  // Action area
-  if (role?.hasAction && game.phase === 'night') {
-    actionArea.style.display = 'block';
-    renderPlayerAction(game, me);
-  } else {
-    actionArea.style.display = 'none';
+  // Action area — only ever visible inside the role card, so nobody can tell who has one
+  actionArea.style.display = game.phase === 'night' ? 'block' : 'none';
+  if (game.phase === 'night') renderPlayerAction(game, me);
+}
+
+const PHASE_STEPS = ['night', 'discussion', 'voting', 'reveal'];
+
+function renderPhaseBar(game) {
+  const bar = document.getElementById('player-phase-bar');
+  if (game.phase === 'ended') {
+    bar.innerHTML = '<div class="phase-step current">Game Over</div>';
+    return;
   }
+  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Reveal' };
+  const current = PHASE_STEPS.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
+  bar.innerHTML = PHASE_STEPS.map((step, i) =>
+    `<div class="phase-step${i === current ? ' current' : i < current ? ' done' : ''}">${labels[step]}</div>`
+  ).join('');
 }
 
 const SPENT_TEXT = {
@@ -1528,6 +1847,10 @@ function renderPlayerAction(game, me) {
   const others = getLivingPlayers(game).filter(p => p.id !== state.playerId);
   const self = { id: state.playerId, name: me.name, label: 'Myself' };
 
+  if (!ROLES[me.role]?.hasAction) {
+    content.innerHTML = `<p class="text-mist text-small">No action tonight.</p>`;
+    return;
+  }
   if (me.actionSubmitted) {
     content.innerHTML = `<div class="submitted-banner">✓ You're done for tonight.</div>`;
     return;
@@ -1542,38 +1865,40 @@ function renderPlayerAction(game, me) {
 
   switch (me.role) {
     case 'werewolf':
-      html = prompt('Choose your victim — every wolf makes their own kill. Team up on one target to get past a Doctor or a Tank:') + buildTargetGrid(others, 'kill');
+      // Everyone listed in the pack is off limits, so a Hairy Villager can't be told apart by being targetable
+      html = prompt('Choose your victim') +
+        buildTargetGrid(others.filter(p => p.role !== 'werewolf' && p.role !== 'hairy_villager'), 'kill');
       break;
     case 'seer':
-      html = prompt('Choose a player to inspect — the answer appears here when the night ends:') + buildTargetGrid(others, 'inspect');
+      html = prompt('Inspect') + buildTargetGrid(others, 'inspect');
       break;
     case 'doctor':
-      html = prompt('Choose a player to protect tonight:') + buildTargetGrid([...others, self], 'protect');
+      html = prompt('Protect') + buildTargetGrid([...others, self], 'protect');
       break;
     case 'witch':
       html = buildWitchUI(me, others, self);
       break;
     case 'hunter':
-      html = prompt('Fire your single silver bullet:') + buildTargetGrid(others, 'shoot');
+      html = prompt('Shoot') + buildTargetGrid(others, 'shoot');
       break;
     case 'seductress':
-      html = prompt('Choose a player to distract (their action tonight has no effect):') + buildTargetGrid(others, 'distract');
+      html = prompt('Block') + buildTargetGrid(others, 'distract');
       break;
     case 'puppetmaster': {
       const everyone = getLivingPlayers(game).map(p => p.id === state.playerId ? { ...p, label: 'Myself' } : p);
-      html = prompt('Choose a player to control:') + buildTargetGrid(others, 'control', { button: false })
-        + `<div class="mt-16">${prompt('…and who their action should hit instead:')}</div>`
+      html = prompt('Control') + buildTargetGrid(others, 'control', { button: false })
+        + `<div class="mt-16">${prompt('New target')}</div>`
         + buildTargetGrid(everyone, 'control', { slot: 'redirect' });
       break;
     }
     case 'bard':
-      html = prompt("Choose a player whose vote counts double at the next Town Hall:") + buildTargetGrid(others, 'double');
+      html = prompt('Double their vote') + buildTargetGrid(others, 'double');
       break;
     case 'scapegoat':
-      html = prompt('Choose a player — at the next Town Hall, every vote against them counts against you:') + buildTargetGrid(others, 'redirect');
+      html = prompt('Take their votes') + buildTargetGrid(others, 'redirect');
       break;
     case 'symbiote':
-      html = prompt('Choose a player to bond with — linked fates:') + buildTargetGrid(others, 'bond');
+      html = prompt('Bond with') + buildTargetGrid(others, 'bond');
       break;
   }
 
@@ -1597,7 +1922,9 @@ function buildTargetGrid(players, actionType, { slot = 'target', button = true }
   const selectedId = pendingAction.type === actionType
     ? (slot === 'redirect' ? pendingAction.redirectId : pendingAction.targetId)
     : null;
-  let html = `<div class="player-actions-grid">`;
+  // More columns as the village grows, so every name stays on screen
+  const columns = players.length >= 15 ? 4 : players.length >= 7 ? 3 : 2;
+  let html = `<div class="player-actions-grid" style="grid-template-columns:repeat(${columns},1fr)">`;
   players.forEach(p => {
     html += `<div class="action-card${p.id === selectedId ? ' selected' : ''}" data-type="${actionType}" data-slot="${slot}" data-id="${esc(p.id)}" data-name="${esc(p.name)}" onclick="selectTarget(this)">
       <div class="action-name">${esc(p.label || p.name)}</div>
@@ -1605,7 +1932,7 @@ function buildTargetGrid(players, actionType, { slot = 'target', button = true }
   });
   html += `</div>`;
   if (button) {
-    html += `<button class="btn btn-primary mt-16 confirm-action-btn" data-type="${actionType}" onclick="confirmAction()"${canConfirm(actionType) ? '' : ' disabled'}>Confirm Action</button>`;
+    html += `<button class="btn btn-primary mt-16 confirm-action-btn" data-type="${actionType}" onclick="confirmAction()"${canConfirm(actionType) ? '' : ' disabled'}>Confirm</button>`;
   }
   return html;
 }
@@ -1615,12 +1942,12 @@ function buildWitchUI(me, others, self) {
   const canPoison = me.witchPoison !== false;
   let html = '';
   if (canHeal) {
-    html += `<div class="info-box">🧪 Healing Potion — cancels one wolf attack on this player tonight:</div>`;
+    html += `<div class="info-box">🧪 Heal</div>`;
     html += buildTargetGrid([...others, self], 'heal');
   }
   if (canHeal && canPoison) html += `<div class="separator">— or —</div>`;
   if (canPoison) {
-    html += `<div class="info-box warning">☠️ Poison Potion — eliminate a player:</div>`;
+    html += `<div class="info-box warning">☠️ Poison</div>`;
     html += buildTargetGrid(others, 'poison');
   }
   return html;
@@ -1667,47 +1994,118 @@ window.confirmAction = async function() {
   await fbPush(`games/${state.roomCode}/actions`, action);
   await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
   pendingAction = { type: null };
-  toast('Action submitted!');
+  hideRoleCard();
+  fitScreen();
+  toast('Saved');
   pollGame();
 };
 
 window.skipAction = async function() {
   await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
   pendingAction = { type: null };
-  toast('Saving it for another night');
+  hideRoleCard();
+  fitScreen();
+  toast('Saved');
   pollGame();
 };
 
-function renderGhostVoteArea(game) {
-  const area = document.getElementById('ghostVoteContent');
-  if (game.phase !== 'townhall') {
-    area.innerHTML = '<p class="text-mist text-small">Ghost vote opens at Town Hall.</p>';
+function renderTownHallArea(game, me) {
+  const area = document.getElementById('playerTownHallArea');
+  const stage = townHallStage(game);
+
+  if (stage === 'discussion') {
+    area.innerHTML = `<div class="gather-alert">
+      <div class="gather-title">🔔 Gather!</div>
+      <div>Everyone to the Town Hall meeting, now.</div>
+    </div>`;
     return;
   }
-  const myVote = game.ghostVotes?.[state.playerId];
+
+  if (!canVote(me, game)) {
+    area.innerHTML = `<div class="submitted-banner">👻 You've used your final vote.</div>`;
+    return;
+  }
+
+  const myVote = game.votes?.[state.playerId];
+
+  if (stage === 'reveal') {
+    area.innerHTML = me.eliminated && (!myVote || myVote.saved)
+      ? `<div class="submitted-banner">👻 Your final vote is still saved.</div>`
+      : '';
+    return;
+  }
+
   if (myVote) {
-    area.innerHTML = `<div class="submitted-banner">👻 Ghost vote cast for ${esc(myVote.targetName)}.</div>`;
+    const waiting = getVoters(game).filter(p => !game.votes?.[p.id]).length;
+    const done = myVote.saved ? '👻 Your final vote is saved.' : '🔒 Vote locked in.';
+    area.innerHTML = `<div class="submitted-banner">${done} Waiting for ${waiting} more…</div>`;
     return;
   }
-  area.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Who should the village eliminate? Your vote is added to the Town Hall count:</p>` +
-    buildTargetGrid(getLivingPlayers(game), 'ghost', { button: false }) +
-    `<button class="btn btn-ghost-blue mt-16 confirm-action-btn" data-type="ghost" onclick="submitGhostVote()"${canConfirm('ghost') ? '' : ' disabled'}>Submit Ghost Vote</button>`;
+
+  const candidates = getLivingPlayers(game)
+    .filter(p => p.id !== state.playerId && (!game.tiebreak || game.tiebreak.includes(p.id)));
+  const question = (game.tiebreak ? 'Tiebreak! Who should the village eliminate?' : 'Who should the village eliminate?') +
+    (me.eliminated ? ' This is your one final vote, so you can save it for a later Town Hall.' : '');
+  area.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">${question}</p>` +
+    buildTargetGrid(candidates, 'vote', { button: false }) +
+    `<button class="btn ${me.eliminated ? 'btn-ghost-blue' : 'btn-primary'} mt-16 confirm-action-btn" data-type="vote" onclick="submitVote()"${canConfirm('vote') ? '' : ' disabled'}>Confirm Vote</button>` +
+    (me.eliminated && !me.ghostVoteRound ? `<button class="btn btn-secondary mt-8" onclick="saveGhostVote()">Save My Vote for Later</button>` : '');
 }
 
-window.submitGhostVote = async function() {
-  if (!canConfirm('ghost')) { toast('Select a target'); return; }
-  const { targetId, targetName } = pendingAction;
-  await fbUpdate(`games/${state.roomCode}/ghostVotes`, {
-    [state.playerId]: { targetId, targetName }
-  });
+// The blackboard covers the whole screen and shows only the name, so nothing else can be seen when it's held up
+function renderSlateScreen(game, me) {
+  const screen = document.getElementById('slate-screen');
+  const myVote = game.votes?.[state.playerId];
+  const hasSlate = myVote ? !myVote.saved : !me.eliminated;
+  const show = game.phase === 'townhall' && townHallStage(game) === 'reveal' && canVote(me, game) && hasSlate;
+  screen.classList.toggle('show', show);
+  document.body.style.overflow = show ? 'hidden' : '';
+  if (!show) {
+    screen.dataset.name = '';
+    return;
+  }
+  const name = myVote?.targetName || 'No vote';
+  if (screen.dataset.name === name) return;
+  screen.dataset.name = name;
+  screen.innerHTML = `<div class="slate-board" style="--chars:${name.length}">${esc(name)}</div>`;
+}
+
+function chalkSlate(voterName, vote) {
+  return `<div class="chalkboard">
+    <div class="slate-from">${esc(voterName)} votes for</div>
+    <div class="slate-name">${vote ? esc(vote.targetName) : '—'}</div>
+  </div>`;
+}
+
+window.saveGhostVote = async function() {
+  await fbUpdate(`games/${state.roomCode}/votes`, { [state.playerId]: { saved: true } });
   pendingAction = { type: null };
-  toast('Ghost vote submitted');
+  toast('Vote saved for later');
+  pollGame();
+};
+
+window.submitVote = async function() {
+  if (!canConfirm('vote')) { toast('Select a player'); return; }
+  const { targetId, targetName } = pendingAction;
+  document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
+  const updates = { [`votes/${state.playerId}`]: { targetId, targetName } };
+  if (state.gameData.players[state.playerId]?.eliminated) {
+    updates[`players/${state.playerId}/ghostVoteRound`] = state.gameData.round;
+  }
+  await fbUpdate(`games/${state.roomCode}`, updates);
+  pendingAction = { type: null };
+  toast('Vote locked in');
   pollGame();
 };
 
 // ============================================================
 // ROLE CARD REVEAL
 // ============================================================
+
+function hideRoleCard() {
+  document.getElementById('roleCard')?.classList.remove('role-card-shown');
+  state.cardShown = false;
+}
 
 window.toggleRoleCard = function() {
   const card = document.getElementById('roleCard');
@@ -1717,15 +2115,12 @@ window.toggleRoleCard = function() {
   } else {
     card.classList.remove('role-card-shown');
   }
+  fitScreen();
 };
 
 // Auto-hide on visibility change
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    const card = document.getElementById('roleCard');
-    card?.classList.remove('role-card-shown');
-    state.cardShown = false;
-  }
+  if (document.hidden) hideRoleCard();
 });
 
 // ============================================================
@@ -1815,6 +2210,14 @@ function resolveNight(game, roundActions, players) {
     a.notes.push(kind === 'protect' ? 'BLOCKED — protected by the Doctor' : "BLOCKED — saved by the Witch's healing potion");
     return true;
   };
+  // A Puppetmaster can point a wolf at another wolf, but wolves don't kill their own
+  active('kill').forEach(a => {
+    if (ROLES[byId(a.targetId)?.role]?.team === 'wolf') {
+      a.blocked = true;
+      a.cls = 'cancelled';
+      a.notes.push('NO EFFECT — werewolves cannot kill werewolves');
+    }
+  });
   active('kill').forEach(a => {
     if (tryBlock(a, ['heal', 'protect'])) wolfBlocked.add(a.targetId);
     else hits.push(a);
@@ -1902,7 +2305,7 @@ function formatScript(text) {
 // ============================================================
 
 function renderGm(game) {
-  updateGmPhaseBanner(game.phase, game.round);
+  updateGmPhaseBanner(game);
 
   // Lobby shows just the room code and role setup
   document.getElementById('screen-gm').classList.toggle('gm-lobby', game.phase === 'lobby');
@@ -1924,11 +2327,18 @@ function renderGm(game) {
   document.getElementById('assign-roles-btn').disabled = game.phase !== 'lobby';
 }
 
-function updateGmPhaseBanner(phase, round) {
+const TOWN_HALL_BANNER = {
+  discussion: '🕯️ Town Hall — gather & discuss',
+  voting: '🗳️ Town Hall — voting',
+  reveal: '🪧 Town Hall — the reveal'
+};
+
+function updateGmPhaseBanner(game) {
+  const { phase, round } = game;
   const b = document.getElementById('gm-phase-banner');
   if (phase === 'lobby') { b.className='phase-banner phase-lobby'; b.textContent='⏳ Lobby'; }
   else if (phase === 'night') { b.className='phase-banner phase-night'; b.textContent=`🌙 Night ${round||''} Active`; }
-  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent=`🕯️ Town Hall — after Night ${round||''}`; }
+  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent=TOWN_HALL_BANNER[townHallStage(game)]; }
   else if (phase === 'ended') { b.className='phase-banner phase-lobby'; b.textContent='🏁 Game Over'; }
 }
 
@@ -1942,22 +2352,21 @@ function renderGmPlayerList(game) {
 
   const bond = game.symbiote;
   const canEliminate = game.phase === 'night' || game.phase === 'townhall';
-  let html = `<div class="room-code" style="font-size:28px;margin-bottom:12px">${state.roomCode}</div>`;
+  let html = '<div class="compact-grid">';
   players.forEach(p => {
     const isGhost = p.eliminated;
     const bonded = bond && (p.id === bond.aId || p.id === bond.bId);
-    html += `<div class="gm-player-card ${isGhost ? 'ghost-card' : ''}">
-      <div class="top-row">
-        <span class="player-name" style="font-size:16px">${esc(p.name)}${isGhost?' 👻':''}${p.wounded?' 🩹':''}${bonded?' 🔗':''}</span>
+    html += `<div class="gm-player-cell ${isGhost ? 'ghost-card' : ''}">
+      <div class="cell-text">
+        <span class="player-name">${esc(p.name)}${isGhost?' 👻':''}${p.wounded?' 🩹':''}${bonded?' 🔗':''}</span>
         ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
       </div>
-      <div class="player-actions-row">
-        ${canEliminate && !isGhost
-          ? `<button class="btn btn-sm btn-danger" onclick="eliminatePlayer('${p.id}')">Eliminate</button>`
-          : ''}
-      </div>
+      ${canEliminate && !isGhost
+        ? `<button class="gm-x" aria-label="Eliminate ${esc(p.name)}" onclick="eliminatePlayer('${p.id}')">✕</button>`
+        : ''}
     </div>`;
   });
+  html += '</div>';
   container.innerHTML = html;
 }
 
@@ -1972,11 +2381,11 @@ function renderGmPhaseControls(game) {
     const actionCount = getRoundActions(game).length;
     html = `
       <div class="info-box">${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}</div>
-      <button class="btn btn-gold" onclick="advanceToTownHall()">End Night → Call Town Hall 🕯️</button>
+      <button class="btn btn-gold" onclick="advanceToTownHall()">End Night → Call Everyone to Town Hall 🔔</button>
     `;
   } else if (game.phase === 'townhall') {
     html = `
-      <button class="btn btn-secondary" onclick="advanceToNight()">Start Night ${game.round + 1} 🌙</button>
+      ${townHallNextButton(game)}
       <button class="btn btn-danger mt-8" onclick="endGame()">End Game</button>
     `;
   } else if (game.phase === 'ended') {
@@ -1989,6 +2398,8 @@ function renderGmActionInbox(game) {
   const inbox = document.getElementById('gm-action-inbox');
   const resolution = document.getElementById('gm-resolution');
   const thisRound = getRoundActions(game);
+  // During the night the preview below already lists every action
+  inbox.closest('.card').style.display = game.phase === 'night' && thisRound.length ? 'none' : '';
 
   if (!thisRound.length) {
     inbox.innerHTML = '<p class="text-mist text-small">No actions this night yet.</p>';
@@ -2041,15 +2452,27 @@ function actionDescription(a) {
   return types[a.type] || a.type;
 }
 
+// The button that moves Town Hall on to its next step
+function townHallNextButton(game) {
+  const stage = townHallStage(game);
+  if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openVoting()">Open the Floor to Voting 🗳️</button>`;
+  if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
+  return `<button class="btn btn-gold mt-8" onclick="advanceToNight()">Move On — Start Night ${game.round + 1} 🌙</button>`;
+}
+
 function renderGmVoting(game) {
   const voteList = document.getElementById('gm-vote-list');
   const controls = document.getElementById('gm-vote-controls');
-  const notesBox = document.getElementById('ghost-vote-result');
+  const notesBox = document.getElementById('gm-vote-notes');
   const scriptBox = document.getElementById('gm-script-box');
 
   scriptBox.innerHTML = game.gmScript
     ? formatScript(game.gmScript)
     : 'No script yet — it is generated when you call Town Hall.';
+
+  // The script is only needed while it's being read out
+  document.getElementById('gm-script-card').style.display =
+    game.phase === 'townhall' && townHallStage(game) === 'discussion' ? '' : 'none';
 
   if (game.phase !== 'townhall') {
     voteList.innerHTML = '<p class="text-mist text-small">Town Hall is not active.</p>';
@@ -2058,91 +2481,92 @@ function renderGmVoting(game) {
     return;
   }
 
-  const living = getLivingPlayers(game);
+  const stage = townHallStage(game);
+  const players = getVoters(game);
   const votes = game.votes || {};
-
-  // Ghost votes count towards the total
-  const ghostVotes = Object.values(game.ghostVotes || {});
-  const ghostTally = {};
-  ghostVotes.forEach(v => { ghostTally[v.targetId] = (ghostTally[v.targetId] || 0) + 1; });
-
-  const totals = {};
-  living.forEach(p => { totals[p.id] = (votes[p.id] || 0) + (ghostTally[p.id] || 0); });
-
-  // Scapegoat takes every vote cast against their chosen player
+  const { totals, top, leaders, sgActive } = tallyVotes(game);
   const sg = game.scapegoatRedirect;
-  const sgActive = sg && sg.toId in totals && sg.fromId in totals;
-  if (sgActive) {
-    totals[sg.toId] += totals[sg.fromId];
-    totals[sg.fromId] = 0;
-  }
-  const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
+  const bard = game.bardDoubled;
 
   const notes = [];
-  if (ghostVotes.length) notes.push(`👻 ${ghostVotes.length} ghost vote(s) — already included in the totals.`);
-  if (game.bardDoubled && living.some(p => p.id === game.bardDoubled.id)) {
-    notes.push(`🎵 ${esc(game.bardDoubled.name)}'s vote counts double — press + twice for their vote.`);
+  if (bard && getLivingPlayers(game).some(p => p.id === bard.id)) {
+    notes.push(`🎵 ${esc(bard.name)}'s vote counts double — already included in the totals.`);
   }
   if (sgActive) notes.push(`🐐 Votes against ${esc(sg.fromName)} count against ${esc(sg.toName)} instead (Scapegoat).`);
-  notesBox.style.display = notes.length ? 'block' : 'none';
+  notesBox.style.display = notes.length && stage === 'reveal' ? 'block' : 'none';
   notesBox.innerHTML = notes.join('<br>');
 
-  let html = `<div class="flex-between" style="margin-bottom:8px"><span class="text-mist text-small">Tap +/− to count the living players' votes</span><span class="badge">${grandTotal} total</span></div>`;
-
-  living.forEach(p => {
-    const v = votes[p.id] || 0;
-    const extras = [];
-    if (ghostTally[p.id]) extras.push(`+${ghostTally[p.id]} 👻`);
-    if (sgActive && p.id === sg.fromId) extras.push('→ 🐐');
-    if (totals[p.id] !== v) extras.push(`= ${totals[p.id]}`);
-    const pct = grandTotal > 0 ? Math.round(totals[p.id] / grandTotal * 100) : 0;
-    html += `<div class="player-row">
-      <span class="player-name">${esc(p.name)}${extras.length ? ` <span class="text-gold text-small">${extras.join(' ')}</span>` : ''}</span>
-      <div class="flex-between" style="gap:8px">
-        <button class="count-btn" onclick="adjustVote('${p.id}',-1)">−</button>
-        <span class="count-val">${v}</span>
-        <button class="count-btn" onclick="adjustVote('${p.id}',1)">+</button>
-      </div>
-    </div>
-    <div class="vote-bar"><div class="vote-bar-fill" style="width:${pct}%"></div></div>`;
-  });
-
-  voteList.innerHTML = html;
-
-  // Controls
-  const topVote = Math.max(0, ...Object.values(totals));
-  const leaders = living.filter(p => topVote > 0 && totals[p.id] === topVote);
-
-  let ctrlHtml = '';
-  if (leaders.length === 1) {
-    const target = leaders[0];
-    ctrlHtml = `
-      <div class="info-box warning">☠️ <strong>${esc(target.name)}</strong> leads with ${topVote} vote(s).</div>
-      <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${esc(target.name)}</button>
-    `;
-  } else if (leaders.length > 1) {
-    ctrlHtml = `<div class="info-box warning">⚖️ Tie between: ${esc(leaders.map(p=>p.name).join(', '))}. Run a tiebreak vote.</div>`;
+  if (stage === 'discussion') {
+    voteList.innerHTML = '';
+    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Everyone has been told to gather. Read the script, let the village talk, then open the floor.</p>` + townHallNextButton(game);
+    return;
   }
 
-  ctrlHtml += `<button class="btn btn-secondary mt-8" onclick="resetVotes()">Reset Votes</button>`;
-  controls.innerHTML = ctrlHtml;
+  if (stage === 'voting') {
+    const cast = players.filter(p => votes[p.id]).length;
+    voteList.innerHTML = `<div class="flex-between" style="margin-bottom:8px"><span class="text-mist text-small">Votes stay hidden until everyone has voted</span><span class="badge">${cast} / ${players.length}</span></div>` +
+      `<div class="compact-grid">` + players.map(p => `<div class="player-row"><span class="player-name">${esc(p.name)}${p.eliminated ? ' 👻' : ''}</span><span>${votes[p.id] ? '✓' : '⏳'}</span></div>`).join('') + `</div>`;
+    controls.innerHTML = townHallNextButton(game);
+    return;
+  }
+
+  // Reveal — decisions come first, with each slate listed below for the GM to call out
+  const isSaving = p => p.eliminated && (!votes[p.id] || votes[p.id].saved);
+  const saving = players.filter(isSaving);
+  voteList.innerHTML = '<p class="text-mist text-small" style="margin-bottom:4px">Call each name in turn. Each player holds up their phone.</p><div class="compact-grid">' +
+    players.filter(p => !isSaving(p)).map(p => chalkSlate(`${p.name}${p.eliminated ? ' 👻' : ''}`, votes[p.id])).join('') + '</div>' +
+    (saving.length ? `<div class="info-box blue mt-8">👻 Saved their vote: ${esc(saving.map(p => p.name).join(', '))}</div>` : '');
+
+  let ctrlHtml = '';
+  if (game.votedOut) {
+    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out.</div>`;
+  } else {
+    ctrlHtml = `<div class="tally">` + getLivingPlayers(game).filter(p => totals[p.id] > 0).sort((a, b) => totals[b.id] - totals[a.id])
+      .map(p => `<span class="badge">${esc(p.name)} <strong>${totals[p.id]}</strong></span>`).join('') + `</div>`;
+    if (leaders.length === 1) {
+      const target = leaders[0];
+      ctrlHtml += `
+        <div class="info-box warning">☠️ <strong>${esc(target.name)}</strong> leads with ${top} vote(s).</div>
+        <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${esc(target.name)}</button>
+      `;
+    } else if (leaders.length > 1) {
+      ctrlHtml += `
+        <div class="info-box warning">⚖️ Tie between: ${esc(leaders.map(p => p.name).join(', '))}.</div>
+        <button class="btn btn-primary" onclick="startTiebreak()">Run a Tiebreak Vote</button>
+      `;
+    }
+  }
+  controls.innerHTML = ctrlHtml + townHallNextButton(game);
 }
 
 // ============================================================
 // GM ACTIONS
 // ============================================================
 
-window.adjustVote = async function(playerId, delta) {
-  const game = await fbGet(`games/${state.roomCode}`);
-  const current = game?.votes?.[playerId] || 0;
-  const newVal = Math.max(0, current + delta);
-  await fbUpdate(`games/${state.roomCode}/votes`, { [playerId]: newVal });
+window.openVoting = async function() {
+  await fbUpdate(`games/${state.roomCode}`, { townHallStage: 'voting', votes: null, tiebreak: null });
+  toast('The floor is open 🗳️');
   pollGame();
 };
 
-window.resetVotes = async function() {
-  await fbUpdate(`games/${state.roomCode}`, { votes: null, ghostVotes: null });
-  toast('Votes reset');
+window.closeVoting = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game) return;
+  const missing = getVoters(game).filter(p => !game.votes?.[p.id]);
+  if (missing.length && !await askConfirm(`Still waiting on: ${missing.map(p => p.name).join(', ')}.\n\nClose voting anyway?`)) return;
+  await fbUpdate(`games/${state.roomCode}`, { townHallStage: 'reveal' });
+  pollGame();
+};
+
+window.startTiebreak = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game) return;
+  await fbUpdate(`games/${state.roomCode}`, {
+    townHallStage: 'voting',
+    votes: null,
+    tiebreak: tallyVotes(game).leaders.map(p => p.id)
+  });
+  toast('Tiebreak vote open');
   pollGame();
 };
 
@@ -2180,16 +2604,16 @@ async function eliminate(playerId) {
 
 window.eliminatePlayer = async function(playerId) {
   const name = state.gameData?.players?.[playerId]?.name || 'this player';
-  if (!confirm(`Eliminate ${name}?`)) return;
+  if (!await askConfirm(`Eliminate ${name}?`)) return;
   await eliminate(playerId);
 };
 
 window.eliminatePlayerVote = async function(playerId) {
   const game = await fbGet(`games/${state.roomCode}`);
   const player = game?.players?.[playerId];
-  if (!player || !confirm(`Eliminate ${player.name} by village vote?`)) return;
+  if (!player || !await askConfirm(`Eliminate ${player.name} by village vote?`)) return;
 
-  await fbUpdate(`games/${state.roomCode}`, { votes: null, ghostVotes: null });
+  await fbUpdate(`games/${state.roomCode}`, { votedOut: player.name });
 
   // The Jester wins by being voted out
   if (player.role === 'jester') {
@@ -2200,9 +2624,9 @@ window.eliminatePlayerVote = async function(playerId) {
   await eliminate(playerId);
 };
 
-function confirmPending(game) {
+async function confirmPending(game) {
   const pending = pendingPlayers(game);
-  return !pending.length || confirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.\n\nEnd the night anyway?`);
+  return !pending.length || await askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.\n\nEnd the night anyway?`);
 }
 
 // Updates that start the next night
@@ -2215,16 +2639,18 @@ function nextNightUpdates(game, updates) {
 
 window.advanceToTownHall = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
-  if (!game || game.phase !== 'night' || !confirmPending(game)) return;
+  if (!game || game.phase !== 'night' || !await confirmPending(game)) return;
 
   const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
   updates.gmScript = buildTownHallScript(game, updates, report);
   updates.phase = 'townhall';
+  updates.townHallStage = 'discussion';
   updates.votes = null;
-  updates.ghostVotes = null;
+  updates.tiebreak = null;
+  updates.votedOut = null;
 
   await fbUpdate(`games/${state.roomCode}`, updates);
-  toast('Town Hall called 🕯️');
+  toast('Everyone has been called to Town Hall 🔔');
   switchGmTab('vote');
   await endGameIfWon();
   pollGame();
@@ -2235,9 +2661,9 @@ function buildTownHallScript(game, updates, report) {
 
   const reminders = [];
   const bard = updates.bardDoubled || game.bardDoubled;
-  if (bard) reminders.push(`[NOTE: ${bard.name}'s vote counts double this Town Hall.]`);
+  if (bard) reminders.push(`[NOTE: ${bard.name}'s vote counts double this Town Hall. The tally applies this.]`);
   const sg = updates.scapegoatRedirect || game.scapegoatRedirect;
-  if (sg) reminders.push(`[NOTE: Scapegoat — votes against ${sg.fromName} count against ${sg.toName} instead. The vote tracker applies this.]`);
+  if (sg) reminders.push(`[NOTE: Scapegoat — votes against ${sg.fromName} count against ${sg.toName} instead. The tally applies this.]`);
   const jester = getPlayerList(game).find(p => p.role === 'jester' && !p.eliminated && !updates[`players/${p.id}/eliminated`]);
   if (jester) reminders.push(`[REMINDER: ${jester.name} is the Jester — if they are voted out, they win. Don't reveal this.]`);
   if (reminders.length) lines.push(...reminders, '');
@@ -2250,9 +2676,15 @@ window.advanceToNight = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase !== 'townhall') return;
 
+  // Moving on without carrying out a decisive vote is allowed, but shouldn't happen by accident
+  const { leaders } = tallyVotes(game);
+  if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been eliminated.\n\nStart the night anyway?`)) return;
+
   const updates = nextNightUpdates(game, {
+    townHallStage: null,
     votes: null,
-    ghostVotes: null,
+    tiebreak: null,
+    votedOut: null,
     bardDoubled: null,
     scapegoatRedirect: null,
     gmScript: null
@@ -2265,7 +2697,7 @@ window.advanceToNight = async function() {
 };
 
 window.endGame = async function() {
-  if (!confirm('End the game?')) return;
+  if (!await askConfirm('End the game?')) return;
   await fbUpdate(`games/${state.roomCode}`, { phase: 'ended' });
   pollGame();
 };
@@ -2296,17 +2728,13 @@ function buildRoleSetup() {
     const r = ROLES[key];
     const count = roleConfig[key] || 0;
     html += `<div class="toggle-row">
-      <div style="flex:1">
-        <div class="toggle-label">${r.emoji} ${r.name}</div>
-        <div class="toggle-sub">${r.desc}</div>
-      </div>
+      <div class="toggle-label" title="${r.ability}">${r.emoji} ${r.name}</div>
       <div class="count-control">
         <button class="count-btn" onclick="adjustRole('${key}',-1)">−</button>
         <span class="count-val" id="role-count-${key}">${count}</span>
         <button class="count-btn" onclick="adjustRole('${key}',1)">+</button>
       </div>
     </div>`;
-    if (key !== 'hairy_villager') html += '<hr class="divider" style="margin:6px 0">';
   });
 
   container.innerHTML = html;
@@ -2317,6 +2745,7 @@ window.adjustRole = function(key, delta) {
   roleConfig[key] = Math.max(0, (roleConfig[key]||0) + delta);
   document.getElementById(`role-count-${key}`).textContent = roleConfig[key];
   updateRoleTotal();
+  fitScreen();
 };
 
 function updateRoleTotal() {
@@ -2382,13 +2811,14 @@ window.switchGmTab = function(tab) {
   document.querySelectorAll('.gm-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
   document.getElementById(`panel-${tab}`).classList.add('active');
+  fitScreen();
 };
 
 // ============================================================
 // INIT
 // ============================================================
 
-initStars();
+if (!seat) initStars();
 
 // Handle URL params for direct joining
 const params = new URLSearchParams(window.location.search);
