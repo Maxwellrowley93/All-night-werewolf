@@ -13,19 +13,21 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
-- Each player taps their role card to see their role, then taps again to hide it. The card also hides itself if they switch apps.
-- Werewolves can see the rest of their pack.
-- Players with a night ability choose a target on their phone and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
+- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Reveal) and a face-down card.
+- Each player taps the card to see their role and their action, then taps again to hide it. The card also hides itself after they confirm an action, if they switch apps, and at each new stage of the game.
+- Werewolves see the rest of their pack on the card.
+- Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
 - Everyone mingles, schemes and bluffs.
 - On the **Actions** tab, the GM sees every action as it comes in, a step-by-step preview of how the night will play out, and the script that will be read.
-- On the **Players** tab, the GM taps **End Night → Call Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first.
+- On the **Players** tab, the GM taps **End Night → Call Everyone to Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first. Every phone then tells its player to gather.
 
 Deaths are applied as soon as a night ends. Eliminated players become ghosts on their phones.
 
 ### 3. Town Hall
-- The **Town Hall** tab shows a script describing what happened in the night. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only.
-- The village discusses and votes. The GM counts the votes with the +/− buttons, and ghost votes are added automatically.
-- The GM eliminates whoever leads the vote, or runs a tiebreak if it's a tie, then taps **Start Night** to begin the next round. Every night is followed by a Town Hall.
+1. **Gather and discuss.** Every phone shows a call to gather. The **Town Hall** tab gives the GM a script describing what happened in the night. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only. The village then discusses.
+2. **Vote.** The GM taps **Open the Floor to Voting**. Each player selects a player on their own phone and taps **Confirm Vote**. A ghost has one final vote: at each Town Hall they either use it or tap **Save My Vote for Later**, and voting waits for that choice. A confirmed vote can't be changed. The GM sees who has voted, but not for whom. If someone can't vote, the GM can tap **Close Voting & Reveal**.
+3. **Reveal.** Once all votes are in, each phone becomes a full-screen landscape blackboard showing only the name its player voted for. The GM calls each name in turn and that player holds up their phone. The GM's phone shows every vote and the tally, with Bard and Scapegoat effects already applied.
+4. **Move on.** The GM eliminates whoever leads the vote, or runs a tiebreak vote between the tied players if it's a tie, then taps **Move On — Start Night** to begin the next round. Every night is followed by a Town Hall.
 
 ### Winning
 - **Villagers** win when every Werewolf is dead.
@@ -36,23 +38,27 @@ The app checks for a win after every night and every elimination, and ends the g
 
 ## Roles
 
+Each player's card gives their role one short line. The full rules are here, for the GM to explain if a question comes up.
+
+Each player's card gives their role one short line. The full rules are here, for the GM to explain if a question comes up.
+
 | Role | Team | What it does |
 |---|---|---|
-| 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack. |
+| 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack and can't target anyone in it. A kill redirected onto a Werewolf has no effect. |
 | 🏡 Villager | Village | No ability. Use your wits at Town Hall. |
 | 🔮 Seer | Village | Each night, inspect a player. When the night ends, your phone shows whether they are a Werewolf. |
 | ⚕️ Doctor | Village | Each night, protect a player (yourself included). The protection cancels **one** attack on them, either a wolf kill or poison. Two wolves on the same target still get through. |
 | 🧙 Witch | Village | One Healing Potion (cancels one wolf attack on a player) and one Poison Potion (kills anyone). Each can be used once, and only one per night. |
 | 🎯 Hunter | Village | Once per game, shoot a player at night. Nothing can stop the silver bullet. |
-| 🎵 Bard | Village | Once per game, choose a player whose vote counts double at the next Town Hall. The GM is reminded to count that vote twice. |
-| 🐐 Scapegoat | Village | Once per game, choose a player. At the next Town Hall, every vote against them counts against you instead. The vote tracker applies this automatically. |
+| 🎵 Bard | Village | Once per game, choose a player whose vote counts double at the next Town Hall. The tally counts that vote twice. |
+| 🐐 Scapegoat | Village | Once per game, choose a player. At the next Town Hall, every vote against them counts against you instead. The tally applies this automatically. |
 | 🃏 Jester | Themselves | Wins by getting voted out at Town Hall. |
 | 💋 Seductress | Village | Each night, distract a player. Whatever action they take that night has no effect. |
 | 🎭 Puppetmaster | Village | Each night, pick a player to control and a new target for them. Their action hits your chosen target instead. |
 | 🔗 Symbiote | Village | Once per game, bond with a player. From then on, if either of you dies, so does the other. |
 | ⭐ Mayor | Village | Revealed to everyone when the game starts. |
 | 🛡️ Tank | Village | Survives the first night attack (they're wounded and it's announced). The second attack kills, whether it comes on a later night or the same night, so two wolves can kill an unwounded Tank in one night. A Town Hall vote still eliminates them outright. |
-| 🧔 Hairy Villager | Village | A Villager, but the Werewolves see them listed as part of their pack. The Seer sees them as not a Werewolf. |
+| 🧔 Hairy Villager | Village | A Villager, but the Werewolves see them listed as part of their pack, so they can't choose to kill them. The Seer sees them as not a Werewolf. |
 
 ### Night resolution order
 
@@ -63,13 +69,14 @@ When the night ends, actions are applied in this order:
 3. **Symbiote.** The bond is formed. It takes effect immediately, so it counts for deaths that same night.
 4. **Doctor and the Witch's healing potion.**
 5. **Seer.**
-6. **Attacks.** Each werewolf's kill, then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
+6. **Attacks.** Each werewolf's kill (unless it now points at a Werewolf), then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
 7. **Symbiote deaths.** If one bonded player died, their partner dies too.
 8. **Bard and Scapegoat.** Their effects are stored for the next Town Hall.
 
 ## Good to know
 
 - **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can only resume on the device that created the game.
+- **No scrolling.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players.
 - **Leave game** at the bottom of the screen takes a phone out of the current game.
 - **Roles are not cryptographically secret.** All game data, including every player's role, is stored in an open Firebase database. Someone determined could read it with their browser's developer tools. It's built for friends playing in the same room, not for strangers online.
 
@@ -90,6 +97,16 @@ The whole app is a single file, `index.html`. There's no build step and nothing 
 4. **Hosting:** any static host works. This repo uses GitHub Pages, serving `index.html` from the `main` branch.
 
 To try it locally, open `index.html` in a browser, or serve the folder with any static server (for example, `npx serve`). It still talks to whichever Firebase database `FIREBASE_URL` points at.
+
+## Testing on one browser
+
+`test.html` runs a Game Master and any number of players side by side, each in its own window on the page. It uses the real game and the real database.
+
+1. Run `python serve.py` and open http://localhost:8123/test.html. Opening the file directly won't work, and `serve.py` stops the browser keeping old copies of the files.
+2. Choose how many players you want and tap **New Test Game**. The windows create the room and join it automatically.
+3. Set the roles in the Game Master window and start the game. Play each phone by hand, or use **Random** on one window or **Random Choices for Everyone Waiting** on all of them.
+
+Windows waiting for a choice have an orange border. Reloading the page returns to the same game. **New Test Game** and **Delete Test Game** remove the test room from the database.
 
 ## How it works
 

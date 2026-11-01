@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werewolf Test Bench</title>
+<style>
+  :root {
+    --shadow: #1A1208;
+    --panel: #261C0F;
+    --line: rgba(201,168,76,0.3);
+    --moon: #E8D5A3;
+    --pale: #F5ECD7;
+    --mist: #8A9E87;
+    --gold: #C9A84C;
+    --blood: #8B1A1A;
+    --ghost-blue: #6A8AAA;
+    --zoom: 0.75;
+    --phone-w: 390px;
+    --phone-h: 700px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Georgia, serif;
+    background: var(--shadow);
+    color: var(--pale);
+    min-height: 100vh;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 18px; color: var(--moon); font-weight: normal; }
+  label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--mist); }
+  input, select {
+    background: var(--shadow);
+    color: var(--pale);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font: inherit;
+  }
+  input[type=number] { width: 60px; }
+  button {
+    background: rgba(255,255,255,0.06);
+    color: var(--pale);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: rgba(255,255,255,0.14); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: var(--gold); border-color: var(--gold); color: var(--shadow); font-weight: bold; }
+  #room { font-size: 18px; letter-spacing: 0.15em; color: var(--gold); }
+  #message { font-size: 14px; color: var(--mist); }
+
+  #seats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  .seat {
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .seat.gm { border-color: var(--gold); }
+  .seat.waiting { border-color: #E0703A; }
+  .seat.ghost { border-color: var(--ghost-blue); }
+  .seat-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 44px;
+    padding: 4px 8px;
+    font-size: 14px;
+  }
+  .seat-name { font-weight: bold; color: var(--moon); }
+  .seat-role { font-size: 12px; color: var(--mist); }
+  .seat-bar button { padding: 3px 7px; font-size: 12px; white-space: nowrap; }
+  iframe {
+    display: block;
+    width: var(--phone-w);
+    height: var(--phone-h);
+    border: 0;
+    zoom: var(--zoom);
+    background: var(--shadow);
+  }
+  #empty { padding: 48px 16px; text-align: center; color: var(--mist); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐺 Test Bench</h1>
+  <label>Players <input type="number" id="count" min="1" max="20" value="7"></label>
+  <button class="primary" id="new-btn" onclick="newGame()">New Test Game</button>
+  <button id="fill-btn" onclick="fillWaiting()" disabled>Random Choices for Everyone Waiting</button>
+  <label>Size
+    <select id="zoom" onchange="setZoom(this.value)">
+      <option value="0.5">Small</option>
+      <option value="0.75" selected>Medium</option>
+      <option value="1">Full</option>
+    </select>
+  </label>
+  <label>Phone
+    <select id="phone" onchange="setPhone(this.value)">
+      <option value="360x600">Small</option>
+      <option value="390x700" selected>Typical</option>
+      <option value="430x800">Large</option>
+    </select>
+  </label>
+  <button id="delete-btn" onclick="deleteGame()" disabled>Delete Test Game</button>
+  <span id="room"></span>
+  <span id="message"></span>
+</header>
+<div id="seats"></div>
+<div id="empty">Choose how many players you want and start a new test game. Each window below acts as its own phone.</div>
+
+<script>
+// Every window runs the real game (index.html) against the real database.
+// The ?seat= parameter gives each window its own saved session, so they can share one browser.
+const BENCH_KEY = 'allnight-werewolf-test-bench';
+const SESSION_KEY = 'allnight-werewolf-session';
+const NAMES = ['Ana', 'Ben', 'Cleo', 'Dev', 'Esme', 'Finn', 'Gwen', 'Hugo', 'Isla', 'Jack',
+  'Kira', 'Liam', 'Mina', 'Noah', 'Opal', 'Pete', 'Quin', 'Rosa', 'Sam', 'Tess'];
+
+const seatsEl = document.getElementById('seats');
+const say = text => { document.getElementById('message').textContent = text; };
+const randomOf = list => list[Math.floor(Math.random() * list.length)];
+let seats = [];
+
+function saveBench(bench) {
+  localStorage.setItem(BENCH_KEY, JSON.stringify(bench));
+}
+
+function addSeat(id, name, room) {
+  const el = document.createElement('div');
+  el.className = `seat${id === 'gm' ? ' gm' : ''}`;
+  el.innerHTML = `<div class="seat-bar">
+      <div><div class="seat-name"></div><div class="seat-role"></div></div>
+      <button style="display:none">Random</button>
+    </div>
+    <iframe title="${name}"></iframe>`;
+  el.querySelector('.seat-name').textContent = id === 'gm' ? `${name} (GM)` : name;
+  const frame = el.querySelector('iframe');
+  const seat = { id, name, el, frame };
+  el.querySelector('button').onclick = () => actRandomly(seat);
+  const loaded = new Promise(resolve => { frame.onload = resolve; });
+  // The timestamp makes sure a window never runs an old cached copy of the game
+  frame.src = `index.html?seat=${id}${room ? `&room=${room}` : ''}&t=${Date.now()}`;
+  seatsEl.appendChild(el);
+  seats.push(seat);
+  return loaded.then(() => seat);
+}
+
+function clearSeats() {
+  seats.forEach(s => localStorage.removeItem(`${SESSION_KEY}-${s.id}`));
+  seats = [];
+  seatsEl.innerHTML = '';
+}
+
+async function firebaseUrl() {
+  const source = await (await fetch('index.html')).text();
+  return source.match(/FIREBASE_URL = "([^"]+)"/)[1];
+}
+
+async function deleteRoom(room) {
+  if (room) await fetch(`${await firebaseUrl()}/games/${room}.json`, { method: 'DELETE' });
+}
+
+function loadBench() {
+  try { return JSON.parse(localStorage.getItem(BENCH_KEY)); } catch (e) { return null; }
+}
+
+function showRoom(room) {
+  document.getElementById('room').textContent = room || '';
+  document.getElementById('delete-btn').disabled = !room;
+  document.getElementById('empty').style.display = room ? 'none' : 'block';
+}
+
+async function newGame() {
+  const count = Math.min(NAMES.length, Math.max(1, Number(document.getElementById('count').value) || 7));
+  const button = document.getElementById('new-btn');
+  button.disabled = true;
+  say('Setting up…');
+  try {
+    await deleteRoom(loadBench()?.room);
+    clearSeats();
+    showRoom(null);
+    localStorage.removeItem(BENCH_KEY);
+    localStorage.removeItem(`${SESSION_KEY}-gm`);
+    for (let i = 0; i < NAMES.length; i++) localStorage.removeItem(`${SESSION_KEY}-p${i}`);
+
+    const gm = await addSeat('gm', 'Game Master');
+    gm.frame.contentDocument.getElementById('playerName').value = 'Game Master';
+    await gm.frame.contentWindow.createGame();
+    const room = JSON.parse(localStorage.getItem(`${SESSION_KEY}-gm`) || '{}').roomCode;
+    if (!room) throw new Error('The game could not be created.');
+
+    const names = NAMES.slice(0, count);
+    saveBench({ room, names });
+    showRoom(room);
+    await Promise.all(names.map(async (name, i) => {
+      const seat = await addSeat(`p${i}`, name, room);
+      seat.frame.contentDocument.getElementById('playerName').value = name;
+      await seat.frame.contentWindow.joinGame();
+    }));
+    say('Everyone has joined. Set the roles in the Game Master window and start.');
+  } catch (e) {
+    say(`Setup failed: ${e.message}`);
+  }
+  button.disabled = false;
+}
+
+async function deleteGame() {
+  const bench = loadBench();
+  if (!bench) return;
+  await deleteRoom(bench.room);
+  clearSeats();
+  localStorage.removeItem(BENCH_KEY);
+  localStorage.removeItem(`${SESSION_KEY}-gm`);
+  showRoom(null);
+  say('');
+}
+
+function setZoom(value) {
+  document.documentElement.style.setProperty('--zoom', value);
+  try { localStorage.setItem(`${BENCH_KEY}-zoom`, value); } catch (e) {}
+}
+
+function setPhone(value) {
+  const [width, height] = value.split('x');
+  document.documentElement.style.setProperty('--phone-w', `${width}px`);
+  document.documentElement.style.setProperty('--phone-h', `${height}px`);
+}
+
+// Choices the window is currently offering, including any inside a role card that's still face down
+function visibleCards(seat) {
+  const doc = seat.frame.contentDocument;
+  if (!doc) return [];
+  const showing = el => el.offsetParent !== null || el.closest('#playerActionArea')?.style.display === 'block';
+  return [...doc.querySelectorAll('.action-card')].filter(showing);
+}
+
+// Taps a random choice and confirms it, through the game's own buttons
+function actRandomly(seat) {
+  const cards = visibleCards(seat);
+  if (!cards.length) return;
+  const type = randomOf(cards).dataset.type;
+  const ofType = cards.filter(c => c.dataset.type === type);
+  new Set(ofType.map(c => c.dataset.slot)).forEach(slot => {
+    randomOf(ofType.filter(c => c.dataset.slot === slot)).click();
+  });
+  seat.frame.contentDocument.querySelector(`.confirm-action-btn[data-type="${type}"]`)?.click();
+}
+
+function fillWaiting() {
+  seats.filter(s => visibleCards(s).length).forEach(actRandomly);
+}
+
+// Keeps each window's label in step with what that window is showing
+function refreshLabels() {
+  let waiting = 0;
+  seats.forEach(seat => {
+    const doc = seat.frame.contentDocument;
+    if (!doc || seat.id === 'gm') return;
+    const role = doc.getElementById('playerRoleName')?.textContent || '';
+    const inGame = doc.getElementById('screen-player-role')?.offsetParent !== null;
+    const isGhost = inGame && doc.getElementById('playerGhostArea')?.style.display === 'block';
+    const needsChoice = visibleCards(seat).length > 0;
+    if (needsChoice) waiting++;
+    seat.el.querySelector('.seat-role').textContent = inGame ? `${role}${isGhost ? ' · 👻 ghost' : ''}` : 'In the lobby';
+    seat.el.querySelector('button').style.display = needsChoice ? '' : 'none';
+    seat.el.classList.toggle('waiting', needsChoice);
+    seat.el.classList.toggle('ghost', isGhost && !needsChoice);
+  });
+  document.getElementById('fill-btn').disabled = !waiting;
+}
+setInterval(refreshLabels, 1000);
+
+// Reloading this page puts every window back in the same game
+(function restore() {
+  try {
+    const zoom = localStorage.getItem(`${BENCH_KEY}-zoom`);
+    if (zoom) {
+      document.getElementById('zoom').value = zoom;
+      setZoom(zoom);
+    }
+  } catch (e) {}
+  const bench = loadBench();
+  if (!bench?.room) return;
+  showRoom(bench.room);
+  document.getElementById('count').value = bench.names.length;
+  addSeat('gm', 'Game Master');
+  bench.names.forEach((name, i) => addSeat(`p${i}`, name, bench.room));
+})();
+</script>
+</body>
+</html>
