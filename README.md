@@ -9,11 +9,12 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 ### 1. Set up
 1. The GM opens the app, enters their name and taps **Create New Game**. The GM's screen shows the room code, who has joined, and the role setup.
 2. Players open the app, enter their name and the room code, and tap **Join Game**. You can also share `…/All-night-werewolf/?room=ABCD` and the code is filled in for you.
-3. The GM chooses how many of each role to include. The role count must match the number of players and include at least one Werewolf.
-4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
+3. The GM chooses how many of each role to include. The role count must match the number of players and include at least one Werewolf. The Mayor, Bard, Scapegoat and Symbiote are limited to one each.
+4. The GM sets when **the Final** begins: by default when the number of players left equals the starting Werewolves + 2, adjustable with − and +.
+5. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
-- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Banish, Dawn) and a face-down card.
+- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Banish, Dawn), a status line such as "🐺 2 of 3 still hidden · 🏁 Final at 5 players · 9 left", and a face-down card.
 - Each player taps the card to see their role and their action, then taps again to hide it. The card also hides itself after they confirm an action, if they switch apps, and at each new stage of the game.
 - The card says which team the player is on: Villager team, Werewolf team, or, for the Jester, no team. When a role is revealed, the GM's script gives the team too.
 - Werewolves see the rest of their pack on the card.
@@ -29,12 +30,26 @@ Nobody dies yet. When the night ends, the Seer gets their result and any Bard, S
 2. **Vote.** The GM taps **Open the Floor to Voting**. Each player selects a player on their own phone and taps **Confirm Vote**. A dead villager's ghost has one final vote: at each Town Hall they either use it or tap **Save My Vote for Later**, and voting waits for that choice. Dead Werewolves and the Jester don't get a ghost vote, and nor does a Symbiote unless their host is a villager who is still alive. A confirmed vote can't be changed. The GM sees who has voted, but not for whom. If someone can't vote, the GM can tap **Close Voting & Reveal**.
 3. **Banish.** Once all votes are in, each phone becomes a full-screen landscape blackboard showing only the name its player voted for. The GM calls each name in turn and that player holds up their phone. The GM's phone shows every vote and the tally, with Bard and Scapegoat effects already applied.
 4. **Move on.** The GM eliminates whoever leads the vote and reveals their role, or runs a tiebreak vote between the tied players if it's a tie, then taps **Move On — Go to Dawn**.
-5. **Dawn.** The night's attacks land and the GM reads out what happened from the script. An attack on someone who has just been voted out is wasted. Choices made before the vote still count even if the player who made them was voted out, so a banished wolf's kill still lands. Anyone who dies becomes a ghost on their phone. The GM then taps **Start Night** to begin the next round.
+5. **Dawn.** The night's attacks land and the GM reads out what happened from the script. An attack on someone who has just been voted out is wasted. Choices made before the vote still count even if the player who made them was voted out, so a banished wolf's kill still lands. Anyone who dies becomes a ghost on their phone. The GM then taps **Start Night** to begin the next round, or **Begin the Final** once it's due.
+
+### 4. The Final
+The Final is the climax: no more nights, only votes. It's due at dawn once the players left reach the number set at the start, or the Werewolves equal everyone else. The GM can also tap **Begin the Final Early**.
+
+Each round of the Final is a Town Hall (Gather, End?, Decision, Vote, Banish):
+1. **Gather.** The GM reads the Final's script and the village talks.
+2. **End?** The GM taps **Open the End Vote**. Each living player secretly chooses **END** or **BANISH** on their phone.
+3. **Decision.** Once everyone has chosen, each phone's blackboard shows END or BANISH, and the GM calls them out. If a majority chose END, the GM taps **End the Game**. Otherwise (a tie or fewer) the GM taps **Banish Someone**.
+4. **Vote and banish.** A normal vote, with ghost votes and tiebreaks as usual. Whoever is banished in the Final **doesn't reveal their role**, so from then on the wolf count shows "?". They don't get a ghost vote. The GM then taps **Next Round of the Final**.
+
+The GM can tap **Declare Stalemate & End the Game** at any time in the Final, for example if tiebreaks keep tying.
+
+When the Final ends, the survivors reveal who they are. Each survivor's phone has a **Reveal Who I Am** button: when the GM calls their name, they tap it and their phone fills with their team (🐺 Werewolf, 🏡 Villager and so on) to hold up. The GM then taps **Show the Result**.
 
 ### Winning
-- **Villagers** win when every Werewolf is dead.
-- **Werewolves** win when they equal or outnumber everyone else still alive.
-- **The Jester** wins on their own if the village votes them out at Town Hall.
+- **Villagers** win when every Werewolf is dead before the Final, or when the Final ends with no Werewolf among the survivors.
+- **Werewolves** win if any Werewolf survives to the end of the Final, or at once if they ever outnumber everyone else still alive. Equal numbers start (or continue) the Final instead.
+- **The Jester** wins on their own if the village votes them out at Town Hall, in the Final too.
+- With two players left, the game ends automatically.
 
 The app checks for a win after every vote and every dawn, and ends the game automatically.
 

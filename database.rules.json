@@ -8,8 +8,17 @@
         "phase": { ".validate": "newData.isString() && newData.val().matches(/^(lobby|night|townhall|ended)$/)" },
         "round": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
         "createdAt": { ".validate": "newData.isNumber()" },
-        "townHallStage": { ".validate": "newData.isString() && newData.val().matches(/^(discussion|voting|reveal|dawn)$/)" },
+        "townHallStage": { ".validate": "newData.isString() && newData.val().matches(/^(discussion|voting|reveal|dawn|endvote|endreveal)$/)" },
         "winner": { ".validate": "newData.isString() && newData.val().matches(/^(village|wolf|jester)$/)" },
+        "final": { ".validate": "newData.isBoolean()" },
+        "finalAt": { ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 20" },
+        "finalReveal": { ".validate": "newData.isBoolean()" },
+        "endVotes": {
+          "$voter": { ".validate": "$voter.matches(/^[a-z0-9]{1,20}$/) && newData.isString() && newData.val().matches(/^(end|banish)$/)" }
+        },
+        "finalOut": {
+          "$player": { ".validate": "$player.matches(/^[a-z0-9]{1,20}$/) && newData.val() === true" }
+        },
         "gmScript": { ".validate": "newData.isString() && newData.val().length <= 10000" },
         "votedOut": { ".validate": "newData.isString() && newData.val().length <= 20" },
         "tiebreak": {
