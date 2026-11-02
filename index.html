@@ -72,7 +72,7 @@
   #app {
     position: relative;
     z-index: 1;
-    min-height: 100vh;
+    min-height: var(--screen-h, 100vh);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -951,7 +951,7 @@
   #app.in-game .role-reveal-back h3 { margin: 0; white-space: nowrap; }
   #app.in-game .role-reveal-back p { font-size: 12px; line-height: 1.15; }
   /* A big card to tap, except while voting when the names need the room */
-  #app.in-game .role-reveal-card.tall:not(.role-card-shown) .role-reveal-back { min-height: 60vh; flex-direction: column; gap: 14px; }
+  #app.in-game .role-reveal-card.tall:not(.role-card-shown) .role-reveal-back { min-height: calc(var(--screen-h, 100vh) * 0.6); flex-direction: column; gap: 14px; }
   #app.in-game .role-reveal-card.tall .eye-icon { font-size: 64px; }
   #app.in-game .role-reveal-card.tall .role-reveal-back h3 { font-size: 18px; }
   #app.in-game .role-reveal-card.tall .role-reveal-back p { font-size: 15px; line-height: 1.4; }
@@ -1056,8 +1056,8 @@
     transform: translateX(-50%);
     z-index: 2;
     width: auto;
-    padding: 4px 10px;
-    font-size: 9px;
+    padding: calc(4px * var(--wide, 1)) calc(10px * var(--wide, 1));
+    font-size: calc(9px * var(--wide, 1));
   }
 
   /* Test windows: many copies run at once, so skip the decoration */
@@ -1478,25 +1478,45 @@ function showScreen(id) {
   fitScreen();
 }
 
-// Shrinks the page until it fits the screen, so nobody has to scroll to find a name or a button
+// Shrinks the page until it fits the screen, so nobody has to scroll to find a name or a button.
+// Screens wider than a phone, including Android Chrome's "Desktop site" mode, get everything scaled up to fill the width.
 const MIN_FIT = 0.55;
 const LEAVE_BTN_SPACE = 32;
+const PHONE_WIDTH = 430;
 function fitScreen() {
   // The on-screen keyboard shrinks the window while typing a name, and that shouldn't shrink the page
   if (document.activeElement?.tagName === 'INPUT') return;
   const app = document.getElementById('app');
-  // Keeps the page clear of the Leave game button pinned to the bottom of the screen
+  const page = document.documentElement;
+  const widthScale = Math.max(1, page.clientWidth / PHONE_WIDTH);
+  // The Leave game button sits outside the page so shrinking doesn't move it, but it grows with a wide screen
+  page.style.setProperty('--wide', widthScale);
   const setZoom = value => {
     app.style.zoom = value;
-    app.style.paddingBottom = app.classList.contains('in-game') ? `${LEAVE_BTN_SPACE / value}px` : '';
+    // Lay the page out at the size that fills the screen once zoomed (vh units would grow with the zoom)
+    app.style.width = `${Math.floor(page.clientWidth / value)}px`;
+    app.style.setProperty('--screen-h', `${window.innerHeight / value}px`);
+    // Keeps the page clear of the Leave game button pinned to the bottom of the screen
+    app.style.paddingBottom = app.classList.contains('in-game') ? `${LEAVE_BTN_SPACE * widthScale / value}px` : '';
   };
-  let zoom = 1;
+  const fits = () => page.scrollHeight <= window.innerHeight;
+
+  let zoom = widthScale;
   setZoom(zoom);
   growGmScreen();
-  while (document.documentElement.scrollHeight > window.innerHeight && zoom > MIN_FIT) {
-    zoom -= 0.03;
-    setZoom(zoom);
+  if (fits()) return;
+
+  // Otherwise the largest zoom that fits, down to MIN_FIT
+  let low = MIN_FIT;
+  setZoom(low);
+  if (!fits()) return;
+  while (zoom - low > 0.01) {
+    const mid = (low + zoom) / 2;
+    setZoom(mid);
+    if (fits()) low = mid;
+    else zoom = mid;
   }
+  setZoom(low);
 }
 
 // The GM's screens usually have room to spare, so their text grows to fill the phone:
