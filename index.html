@@ -391,6 +391,8 @@
   }
   .role-team.team-village { background: rgba(60,110,60,0.25); border: 1px solid rgba(90,160,90,0.6); color: #A0E0A0; }
   .role-team.team-wolf { background: rgba(139,26,26,0.45); border: 1px solid rgba(200,80,80,0.7); color: #FFB0B0; }
+  .role-team.team-symbiote { background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.5); color: var(--gold); }
+  .werewolf-partners.bond-info { background: rgba(201,168,76,0.1); border-color: rgba(201,168,76,0.45); }
   .role-team.team-jester { background: rgba(120,60,140,0.3); border: 1px solid rgba(180,110,200,0.6); color: #E0B0F0; }
   .role-reveal-front .role-desc {
     font-size: 15px;
@@ -1146,6 +1148,9 @@
           <div class="role-desc" id="playerRoleDesc"></div>
           <div class="role-ability" id="playerRoleAbility"></div>
           <!-- Werewolf partners -->
+          <!-- Symbiote's host -->
+          <div class="werewolf-partners bond-info" id="bondBox" style="display:none"></div>
+
           <div class="werewolf-partners" id="wolfPartnersBox" style="display:none">
             <div class="partners-label">🐺 Your Pack</div>
             <div id="wolfPartnersList"></div>
@@ -1433,7 +1438,7 @@ const ROLES = {
   },
   symbiote: {
     name: 'Symbiote', team: 'village', emoji: '🔗',
-    ability: 'Once per game, bond with a player. If one dies, both die.',
+    ability: 'Bond with a player tonight. You join their side and win if they survive. If they die, so do you.',
     hasAction: true, actionType: 'bond',
     cssClass: 'role-symbiote'
   },
@@ -1933,8 +1938,16 @@ function renderPlayer(game) {
 
   document.getElementById('playerRoleName').textContent = `${role?.emoji || ''} ${role?.name || me.role}`;
   const team = document.getElementById('playerRoleTeam');
-  team.className = `role-team team-${role?.team}`;
-  team.textContent = TEAMS[role?.team]?.card || '';
+  const bond = game.symbiote;
+  const bonded = me.role === 'symbiote' && bond?.aId === state.playerId;
+  const myTeam = teamOf(game, { ...me, id: state.playerId });
+  if (me.role === 'symbiote' && !bonded) {
+    team.className = 'role-team team-symbiote';
+    team.textContent = '🔗 Your side: whoever you bond with';
+  } else {
+    team.className = `role-team team-${myTeam}`;
+    team.textContent = bonded && myTeam === 'jester' ? "🃏 On the Jester's side" : TEAMS[myTeam]?.card || '';
+  }
   document.getElementById('playerRoleDesc').textContent = role?.desc || '';
   document.getElementById('playerRoleAbility').textContent = (role?.ability || '') +
     (me.wounded && !me.eliminated ? ' 🩹 Wounded: one more attack kills you.' : '');
@@ -1950,6 +1963,14 @@ function renderPlayer(game) {
     document.getElementById('wolfPartnersList').textContent = pack.join(', ');
   } else {
     wolfBox.style.display = 'none';
+  }
+
+  // Symbiote — who they're bonded to, and exactly what that player is
+  const bondBox = document.getElementById('bondBox');
+  bondBox.style.display = bonded ? 'block' : 'none';
+  if (bonded) {
+    const hostRole = ROLES[game.players?.[bond.bId]?.role];
+    bondBox.innerHTML = `🔗 Bonded to <strong>${esc(bond.bName)}</strong>, the ${hostRole?.emoji || ''} <strong>${esc(hostRole?.name || '')}</strong>. You win if ${esc(bond.bName)} survives the game.`;
   }
 
   // Mayor is public knowledge
@@ -2032,7 +2053,7 @@ const SPENT_TEXT = {
 };
 
 // Roles whose ability is optional each night get a "Not tonight" button
-const OPTIONAL_ACTION_ROLES = ['hunter', 'bard', 'scapegoat', 'symbiote', 'witch'];
+const OPTIONAL_ACTION_ROLES = ['hunter', 'bard', 'scapegoat', 'witch'];
 
 function renderPlayerAction(game, me) {
   const content = document.getElementById('playerActionContent');
@@ -2062,9 +2083,9 @@ function buildActionChoices(game, actor) {
 
   switch (actor.role) {
     case 'werewolf':
-      // Everyone listed in the pack is off limits, so a Hairy Villager can't be told apart by being targetable
-      html = prompt('Choose your victim') +
-        buildTargetGrid(others.filter(p => p.role !== 'werewolf' && p.role !== 'hairy_villager'), 'kill');
+      // The whole pack is on the list, so a Hairy Villager's name doesn't stand out.
+      // A kill on a real wolf has no effect, so finding the Hairy Villager costs the pack a kill.
+      html = prompt('Choose your victim') + buildTargetGrid(others, 'kill');
       break;
     case 'seer':
       html = prompt('Inspect') + buildTargetGrid(others, 'inspect');
@@ -2419,7 +2440,7 @@ function resolveNight(game, roundActions, players) {
     updates.symbiote = bond;
     updates[`players/${a.fromId}/actionUsed`] = true;
     a.notes.push('fates linked from now on');
-    gatherNotes.push(`[NOTE: Symbiote bond formed between ${a.fromName} and ${a.targetName}. Keep it secret — the app links their fates.]`);
+    gatherNotes.push(`[NOTE: ${a.fromName} (Symbiote) is bonded to ${a.targetName}. Keep it secret. If ${a.targetName} dies, ${a.fromName} dies too.]`);
   });
 
   // 4. Protection and potions — each one cancels a single attack on its target
@@ -2498,15 +2519,13 @@ function resolveNight(game, roundActions, players) {
   wasted.forEach(name => gmNotes.push(`[NOTE: ${name} was already out of the game, so the attack on them was wasted.]`));
   wounded.forEach(p => { dawnUpdates[`players/${p.id}/wounded`] = true; });
 
-  // Symbiote — if one of the pair dies, so does the other
+  // Symbiote — if their host dies, so do they. It doesn't work the other way round.
   if (bond) {
-    [[bond.aId, bond.bId], [bond.bId, bond.aId]].forEach(([deadId, partnerId]) => {
-      const partner = byId(partnerId);
-      if (died.some(p => p.id === deadId) && partner && !partner.eliminated && !died.includes(partner)) {
-        died.push(partner);
-        gmNotes.push(`[NOTE: ${partner.name} died through the Symbiote bond.]`);
-      }
-    });
+    const symbiote = byId(bond.aId);
+    if (died.some(p => p.id === bond.bId) && symbiote && !symbiote.eliminated && !died.includes(symbiote)) {
+      died.push(symbiote);
+      gmNotes.push(`[NOTE: ${symbiote.name} died through the Symbiote bond.]`);
+    }
   }
   died.forEach(p => { dawnUpdates[`players/${p.id}/eliminated`] = true; });
 
@@ -2539,7 +2558,7 @@ function resolveNight(game, roundActions, players) {
   } else if (died.length > 1) {
     report.push(`"A grim morning. We found ${died.slice(0, -1).map(p => p.name).join(', ')} and ${died[died.length - 1].name} dead."`);
   }
-  died.forEach(p => report.push(`[Reveal ${p.name}'s role: ${roleReveal(p)}]`));
+  died.forEach(p => report.push(`[Reveal ${p.name}'s role: ${roleReveal(p, game)}]`));
   if (!report.length) report.push('"The night passed quietly. Nobody was killed."');
   report.push(...gmNotes);
 
@@ -2689,7 +2708,11 @@ function renderGmActionInbox(game) {
     resHtml += `<div class="resolution-step ${a.cls}">${ROLES[a.role]?.emoji||'?'} <strong>${esc(a.fromName)}</strong>: ${esc(actionDescription(a))}${note}</div>`;
   });
   if (game.symbiote) {
-    resHtml += `<div class="resolution-step">🔗 Symbiote bond: if either <strong>${esc(game.symbiote.aName)}</strong> or <strong>${esc(game.symbiote.bName)}</strong> dies, both die.</div>`;
+    resHtml += `<div class="resolution-step">🔗 Symbiote bond: if <strong>${esc(game.symbiote.bName)}</strong> dies, <strong>${esc(game.symbiote.aName)}</strong> dies too.</div>`;
+  }
+  const unbonded = unbondedSymbiote(game);
+  if (unbonded && !thisRound.some(a => a.type === 'bond')) {
+    resHtml += `<div class="resolution-step">🔗 ${esc(unbonded.name)} (Symbiote) hasn't bonded yet. If they don't, the app bonds them to someone at random when you end the night.</div>`;
   }
   resHtml += `<h3 class="mt-16">At dawn, as things stand</h3><div class="gm-script-box">${formatScript([...gatherNotes, ...report].join('\n'))}</div>`;
   resolution.innerHTML = resHtml;
@@ -2788,9 +2811,9 @@ function renderGmVoting(game) {
   if (game.votedOut) {
     const out = getPlayerList(game).find(p => p.name === game.votedOut);
     const bond = game.symbiote;
-    const partner = bond && out && (out.id === bond.aId ? game.players[bond.bId] : out.id === bond.bId ? game.players[bond.aId] : null);
-    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleReveal(out))}</strong>.` +
-      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleReveal(partner))}</strong>.` : '') + `</div>`;
+    const partner = bond && out && out.id === bond.bId ? game.players[bond.aId] : null;
+    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleReveal(out, game))}</strong>.` +
+      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleReveal({ ...partner, id: bond.aId }, game))}</strong>.` : '') + `</div>`;
   } else {
     ctrlHtml = `<div class="tally">` + getLivingPlayers(game).filter(p => totals[p.id] > 0).sort((a, b) => totals[b.id] - totals[a.id])
       .map(p => `<span class="badge">${esc(p.name)} <strong>${totals[p.id]}</strong></span>`).join('') + `</div>`;
@@ -2857,15 +2880,14 @@ async function eliminate(playerId, extraUpdates = {}) {
 
   const updates = { ...extraUpdates, [`players/${playerId}/eliminated`]: true };
 
-  // Symbiote — the bonded partner dies too
+  // Symbiote — when their host is eliminated, they go too
   let partnerName = null;
   const bond = game.symbiote;
-  if (bond && (playerId === bond.aId || playerId === bond.bId)) {
-    const partnerId = playerId === bond.aId ? bond.bId : bond.aId;
-    const partner = game.players?.[partnerId];
-    if (partner && !partner.eliminated) {
-      updates[`players/${partnerId}/eliminated`] = true;
-      partnerName = partner.name;
+  if (bond && playerId === bond.bId) {
+    const symbiote = game.players?.[bond.aId];
+    if (symbiote && !symbiote.eliminated) {
+      updates[`players/${bond.aId}/eliminated`] = true;
+      partnerName = symbiote.name;
     }
   }
 
@@ -2896,7 +2918,15 @@ window.eliminatePlayerVote = async function(playerId) {
 
 async function confirmPending(game) {
   const pending = pendingPlayers(game);
-  return !pending.length || await askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.\n\nEnd the night anyway?`);
+  const symbiote = pending.find(p => p.role === 'symbiote');
+  return !pending.length || await askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.` +
+    (symbiote ? `\n\n${symbiote.name} (Symbiote) will be bonded to someone at random.` : '') +
+    `\n\nEnd the night anyway?`);
+}
+
+// The living Symbiote who still needs a host, if there is one
+function unbondedSymbiote(game) {
+  return game.symbiote ? null : getLivingPlayers(game).find(p => p.role === 'symbiote');
 }
 
 // Updates that start the next night
@@ -2912,6 +2942,18 @@ window.advanceToTownHall = async function() {
   if (!game || game.phase !== 'night' || !await confirmPending(game)) return;
 
   const { updates, gatherNotes } = resolveNight(game, getRoundActions(game), getPlayerList(game));
+
+  // The Symbiote must bond on their first night. If they didn't (or were blocked), pick their host at random.
+  const symbiote = unbondedSymbiote(game);
+  if (symbiote && !updates.symbiote) {
+    const hosts = getLivingPlayers(game).filter(p => p.id !== symbiote.id);
+    const host = hosts[Math.floor(Math.random() * hosts.length)];
+    if (host) {
+      updates.symbiote = { aId: symbiote.id, aName: symbiote.name, bId: host.id, bName: host.name };
+      updates[`players/${symbiote.id}/actionUsed`] = true;
+      gatherNotes.push(`[NOTE: ${symbiote.name} (Symbiote) didn't bond, so the app bonded them to ${host.name} at random. Keep it secret. If ${host.name} dies, ${symbiote.name} dies too.]`);
+    }
+  }
   updates.gmScript = buildTownHallScript(game, updates, gatherNotes);
   updates.phase = 'townhall';
   updates.townHallStage = 'discussion';
@@ -3024,7 +3066,7 @@ function renderPlayerPanel(game) {
   const player = { ...p, id: gmPlayerId };
   const role = ROLES[p.role];
   document.getElementById('gm-pp-title').textContent = `${role?.emoji || ''} ${p.name}`;
-  const sections = [`<div class="info-box">${esc(role?.name || p.role)} (${esc(TEAMS[role?.team]?.reveal || '')})${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
+  const sections = [`<div class="info-box">${esc(role?.name || p.role)} (${esc(TEAMS[teamOf(game, player)]?.reveal || '')})${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
 
   if (game.phase === 'night' && !p.eliminated) sections.push(gmActionSection(game, player));
   const stage = game.phase === 'townhall' ? townHallStage(game) : null;
@@ -3163,12 +3205,22 @@ const TEAMS = {
   jester: { card: '🃏 No team: you win alone', reveal: 'plays alone' }
 };
 
+// A player's side. A bonded Symbiote is on their host's side, though they never count as a wolf.
+function teamOf(game, p) {
+  const bond = game?.symbiote;
+  if (p?.role === 'symbiote' && bond?.aId === p.id) return ROLES[game.players?.[bond.bId]?.role]?.team || 'village';
+  return ROLES[p?.role]?.team;
+}
+
 // A role as the GM reveals it, with the team, e.g. "Seer (Villager team)"
-function roleReveal(p) {
+function roleReveal(p, game) {
   const role = ROLES[p?.role];
   if (!role) return p?.role || 'unknown';
-  return `${role.name} (${TEAMS[role.team]?.reveal})`;
+  return `${role.name} (${TEAMS[teamOf(game, p)]?.reveal})`;
 }
+
+// Only one of each of these can work in a game
+const ONE_PER_GAME = ['mayor', 'bard', 'scapegoat', 'symbiote'];
 
 const defaultRoles = { werewolf: 2, villager: 3, seer: 1, doctor: 1 };
 let roleConfig = { ...defaultRoles };
@@ -3197,7 +3249,8 @@ function buildRoleSetup() {
 }
 
 window.adjustRole = function(key, delta) {
-  roleConfig[key] = Math.max(0, (roleConfig[key]||0) + delta);
+  const most = ONE_PER_GAME.includes(key) ? 1 : Infinity;
+  roleConfig[key] = Math.max(0, Math.min(most, (roleConfig[key] || 0) + delta));
   document.getElementById(`role-count-${key}`).textContent = roleConfig[key];
   updateRoleTotal();
   fitScreen();

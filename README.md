@@ -46,7 +46,7 @@ Each player's card gives their role one short line. The full rules are here, for
 
 | Role | Team | What it does |
 |---|---|---|
-| 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack and can't target anyone in it. A kill redirected onto a Werewolf has no effect. |
+| 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack. They can target anyone, their pack included, but a kill on a Werewolf has no effect. |
 | 🏡 Villager | Village | No ability. Use your wits at Town Hall. |
 | 🔮 Seer | Village | Each night, inspect a player. When the night ends, before the vote, your phone shows whether they are a Werewolf. |
 | ⚕️ Doctor | Village | Each night, protect a player (yourself included). The protection cancels **one** attack on them, either a wolf kill or poison. Two wolves on the same target still get through. |
@@ -57,10 +57,10 @@ Each player's card gives their role one short line. The full rules are here, for
 | 🃏 Jester | Themselves | Wins by getting voted out at Town Hall. |
 | 💋 Seductress | Village | Each night, distract a player. Whatever action they take that night has no effect. |
 | 🎭 Puppetmaster | Village | Each night, pick a player to control and a new target for them. Their action hits your chosen target instead. |
-| 🔗 Symbiote | Village | Once per game, bond with a player. From then on, if either of you dies, so does the other. |
+| 🔗 Symbiote | Their host's | Must bond with a player on their first night, or the app bonds them to someone at random. They learn their host's exact role, join the host's side and win if the host survives the game. If the host dies, the Symbiote dies too, but not the other way round. The host isn't told. A Symbiote never counts as a Werewolf. Only one per game. |
 | ⭐ Mayor | Village | Revealed to everyone when the game starts. |
 | 🛡️ Tank | Village | Survives the first night attack (they're wounded and it's announced). The second attack kills, whether it comes on a later night or the same night, so two wolves can kill an unwounded Tank in one night. A Town Hall vote still eliminates them outright. |
-| 🧔 Hairy Villager | Village | A Villager, but the Werewolves see them listed as part of their pack, so they can't choose to kill them. The Seer sees them as not a Werewolf. |
+| 🧔 Hairy Villager | Village | A Villager, but the Werewolves see them listed as part of their pack. The wolves can still kill them. A kill on a real wolf has no effect, so finding out who the Hairy Villager is costs the pack a kill. The Seer sees them as not a Werewolf. |
 
 ### Night resolution order
 
@@ -68,11 +68,11 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 
 1. **Seductress.** Actions from distracted players have no effect, and a distracted Witch keeps her potion.
 2. **Puppetmaster.** Controlled players' actions are redirected to the new target.
-3. **Symbiote.** The bond is formed. It takes effect immediately, so it counts for that round's vote and attacks.
+3. **Symbiote.** The bond is formed, or made at random if the Symbiote didn't bond. It takes effect immediately, so it counts for that round's vote and attacks.
 4. **Doctor and the Witch's healing potion.**
 5. **Seer.**
 6. **Attacks.** Each werewolf's kill (unless it now points at a Werewolf), then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
-7. **Symbiote deaths.** If one bonded player died, their partner dies too.
+7. **Symbiote deaths.** If the host died, the Symbiote dies too.
 8. **Bard and Scapegoat.** Their effects are stored for the next Town Hall.
 
 ## If something goes wrong
