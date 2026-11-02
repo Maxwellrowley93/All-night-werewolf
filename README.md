@@ -9,7 +9,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 ### 1. Set up
 1. The GM opens the app, enters their name and taps **Create New Game**. The GM's screen shows the room code, who has joined, and the role setup.
 2. Players open the app, enter their name and the room code, and tap **Join Game**. You can also share `…/All-night-werewolf/?room=ABCD` and the code is filled in for you.
-3. The GM chooses how many of each role to include. The role count must match the number of players and include at least one Werewolf. The Mayor, Bard, Scapegoat and Symbiote are limited to one each.
+3. The GM chooses how many of each role to include, or taps **Simple** or **Advanced** under **Quick setup** to fill in a balanced line-up for the players who have joined (see [Suggested line-ups](#suggested-line-ups)), then adjusts it if they like. The role count must match the number of players and include at least one Werewolf. The Mayor, Bard, Scapegoat and Symbiote are limited to one each.
 4. The GM sets when **the Final** begins: by default when the number of players left equals the starting Werewolves + 2, adjustable with − and +.
 5. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
@@ -54,6 +54,31 @@ When the Final ends, the survivors reveal who they are. Each survivor's phone ha
 The app checks for a win after every vote and every dawn, and ends the game automatically.
 
 When the game ends, every phone switches to the result: the winning team in big letters and its colour, then each player's own result (for example "You survived to the end" or "Your team won, but you didn't make it to the end"), then everyone's role grouped by team, with the dead marked 💀. The Symbiote wins or loses with their host, and the Jester with getting voted out. The GM can tap **Play Again with the Same Players** to start a fresh game in the same room: everyone stays in, roles are dealt again and the GM code doesn't change. Werewolves can only win at dawn, once the night's attacks have landed.
+
+## Suggested line-ups
+
+Every wolf kills each night, so the wolves are strong: the village needs roughly one banishment per wolf before the Final. These are what the **Simple** and **Advanced** buttons fill in. Villagers fill the remaining places. They're estimates from the pace of the game, so adjust them once you've seen a few games.
+
+**Simple:** only the classic roles.
+
+| Players | Werewolves | Seer | Doctor | Hunter | Final at |
+|---|---|---|---|---|---|
+| 5 | 1 | 1 | – | – | 3 |
+| 6–8 | 1 | 1 | 1 | – | 3 |
+| 9–12 | 2 | 1 | 1 | – | 4 |
+| 13–14 | 2 | 1 | 1 | 1 | 4 |
+| 15–17 | 3 | 1 | 2 | 1 | 5 |
+| 18–20 | 3 | 2 | 2 | 1 | 5 |
+
+**Advanced:** more wolves, balanced by more protection, plus about one chaos role per six players.
+
+| Players | Werewolves | Village roles | Chaos and twists | Final at |
+|---|---|---|---|---|
+| 5–6 | 1 | Seer, Doctor | – | 3 |
+| 7–8 | 1 | Seer, Doctor | Jester | 3 |
+| 9–12 | 2 | Seer, Doctor, Witch, Bard | Jester, Hairy Villager | 4 |
+| 13–16 | 3 | Seer, 2 Doctors, Witch, Tank, Mayor | Jester, Seductress | 5 |
+| 17–20 | 4 | 2 Seers, 2 Doctors, Witch, Tank, Hunter, Mayor, Bard | Jester, Puppetmaster, Seductress, Symbiote, Scapegoat and Hairy Villager, added one at a time from 17 to 20 players | 6 |
 
 ## Roles
 
