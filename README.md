@@ -13,7 +13,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
-- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Reveal, Dawn) and a face-down card.
+- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Banish, Dawn) and a face-down card.
 - Each player taps the card to see their role and their action, then taps again to hide it. The card also hides itself after they confirm an action, if they switch apps, and at each new stage of the game.
 - Werewolves see the rest of their pack on the card.
 - Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
@@ -26,7 +26,7 @@ Nobody dies yet. When the night ends, the Seer gets their result and any Bard, S
 ### 3. Town Hall
 1. **Gather and discuss.** Every phone shows a call to gather. The **Town Hall** tab gives the GM a script to open the meeting. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only. The village then discusses.
 2. **Vote.** The GM taps **Open the Floor to Voting**. Each player selects a player on their own phone and taps **Confirm Vote**. A ghost has one final vote: at each Town Hall they either use it or tap **Save My Vote for Later**, and voting waits for that choice. A confirmed vote can't be changed. The GM sees who has voted, but not for whom. If someone can't vote, the GM can tap **Close Voting & Reveal**.
-3. **Reveal.** Once all votes are in, each phone becomes a full-screen landscape blackboard showing only the name its player voted for. The GM calls each name in turn and that player holds up their phone. The GM's phone shows every vote and the tally, with Bard and Scapegoat effects already applied.
+3. **Banish.** Once all votes are in, each phone becomes a full-screen landscape blackboard showing only the name its player voted for. The GM calls each name in turn and that player holds up their phone. The GM's phone shows every vote and the tally, with Bard and Scapegoat effects already applied.
 4. **Move on.** The GM eliminates whoever leads the vote and reveals their role, or runs a tiebreak vote between the tied players if it's a tie, then taps **Move On — Go to Dawn**.
 5. **Dawn.** The night's attacks land and the GM reads out what happened from the script. An attack on someone who has just been voted out is wasted. Choices made before the vote still count even if the player who made them was voted out, so a banished wolf's kill still lands. Anyone who dies becomes a ghost on their phone. The GM then taps **Start Night** to begin the next round.
 
@@ -78,7 +78,7 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 
 - **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can only resume on the device that created the game.
 - **No scrolling.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players.
-- **Leave game** at the bottom of the screen takes a phone out of the current game.
+- **Leave game**, always at the very bottom of the screen, takes a phone out of the current game.
 - **Roles are not cryptographically secret.** All game data, including every player's role, is stored in an open Firebase database. Someone determined could read it with their browser's developer tools. It's built for friends playing in the same room, not for strangers online.
 
 ## Hosting your own copy
