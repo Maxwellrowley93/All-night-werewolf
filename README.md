@@ -36,7 +36,9 @@ Nobody dies yet. When the night ends, the Seer gets their result and any Bard, S
 - **Werewolves** win when they equal or outnumber everyone else still alive.
 - **The Jester** wins on their own if the village votes them out at Town Hall.
 
-The app checks for a win after every vote and every dawn, and ends the game automatically. Werewolves can only win at dawn, once the night's attacks have landed.
+The app checks for a win after every vote and every dawn, and ends the game automatically.
+
+When the game ends, every phone switches to the result: the winning team in big letters and its colour, then each player's own result (for example "You survived to the end" or "Your team won, but you didn't make it to the end"), then everyone's role grouped by team, with the dead marked 💀. The Symbiote wins or loses with their host, and the Jester with getting voted out. The GM can tap **Play Again with the Same Players** to start a fresh game in the same room: everyone stays in, roles are dealt again and the GM code doesn't change. Werewolves can only win at dawn, once the night's attacks have landed.
 
 ## Roles
 

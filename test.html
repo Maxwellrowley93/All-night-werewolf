@@ -285,7 +285,8 @@ function refreshLabels() {
     const isGhost = inGame && doc.getElementById('playerGhostArea')?.style.display === 'block';
     const needsChoice = visibleCards(seat).length > 0;
     if (needsChoice) waiting++;
-    seat.el.querySelector('.seat-role').textContent = inGame ? `${role}${isGhost ? ' · 👻 ghost' : ''}` : 'In the lobby';
+    const over = doc.getElementById('screen-result')?.offsetParent !== null;
+    seat.el.querySelector('.seat-role').textContent = over ? `${role} · game over` : inGame ? `${role}${isGhost ? ' · 👻 ghost' : ''}` : 'In the lobby';
     seat.el.querySelector('button').style.display = needsChoice ? '' : 'none';
     seat.el.classList.toggle('waiting', needsChoice);
     seat.el.classList.toggle('ghost', isGhost && !needsChoice);

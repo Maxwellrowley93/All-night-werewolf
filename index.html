@@ -898,6 +898,69 @@
   #screen-gm.gm-lobby .gm-panel { display: none; }
   #screen-gm.gm-lobby #panel-setup { display: block; }
 
+  /* Game over: the winner is the centrepiece */
+  .result-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(var(--screen-h, 100vh) * 0.3);
+    text-align: center;
+    padding: 18px 12px 16px;
+    margin-bottom: 10px;
+    border: 2px solid;
+    border-radius: 12px;
+    animation: result-in 0.6s ease-out;
+  }
+  /* With a big cast, the list needs the room more than the headline does */
+  .result-hero.compact { min-height: 0; }
+  @keyframes result-in { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  html.test-seat .result-hero { animation: none; }
+  .result-hero.win-village { background: radial-gradient(circle at 50% 35%, rgba(110,200,110,0.75), rgba(25,75,25,0.92)); border-color: rgba(150,230,150,0.95); color: #F0FFF0; box-shadow: 0 0 30px rgba(110,200,110,0.45); }
+  .result-hero.win-wolf { background: radial-gradient(circle at 50% 35%, rgba(230,60,60,0.8), rgba(90,8,8,0.95)); border-color: rgba(255,120,120,0.95); color: #FFF0F0; box-shadow: 0 0 30px rgba(230,60,60,0.5); }
+  .result-hero.win-jester { background: radial-gradient(circle at 50% 35%, rgba(190,110,230,0.75), rgba(60,20,85,0.92)); border-color: rgba(220,170,245,0.95); color: #FBF0FF; box-shadow: 0 0 30px rgba(190,110,230,0.45); }
+  .result-hero.win-none { background: rgba(201,168,76,0.12); border-color: rgba(201,168,76,0.5); color: var(--moon); }
+  .result-emoji { font-size: 56px; line-height: 1; }
+  .result-title {
+    margin-top: 8px;
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.15;
+    text-shadow: 0 0 16px rgba(255,255,255,0.35), 0 2px 8px rgba(0,0,0,0.6);
+  }
+  .result-sub { margin-top: 4px; font-size: 16px; font-style: italic; opacity: 0.9; }
+  .result-you {
+    text-align: center;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    font-size: 15px;
+  }
+  .result-you.won { border-color: var(--gold); background: rgba(201,168,76,0.14); }
+  .result-you .you-big { font-family: 'Cinzel Decorative', serif; font-size: 24px; font-weight: 700; color: var(--moon); }
+  .result-you.won .you-big { color: var(--gold); }
+  .cast-team { margin-bottom: 8px; }
+  .cast-heading { margin-bottom: 4px; font-family: 'Cinzel Decorative', serif; font-size: 13px; }
+  .cast-team.team-wolf .cast-heading { color: #FFB0B0; }
+  .cast-team.team-village .cast-heading { color: #A0E0A0; }
+  .cast-team.team-jester .cast-heading { color: #E0B0F0; }
+  .cast-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .cast-grid.three { grid-template-columns: repeat(3, 1fr); }
+  .cast-row {
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    line-height: 1.2;
+  }
+  .cast-row.dead { opacity: 0.55; }
+  .cast-name, .cast-role { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cast-name { font-size: 15px; font-weight: 600; }
+  .cast-role { font-size: 12px; color: var(--mist); }
+
   /* GM: a single player's panel replaces the tabs until Back is tapped */
   #screen-gm.gm-player-open .gm-tabs,
   #screen-gm.gm-player-open .gm-panel { display: none; }
@@ -1129,7 +1192,6 @@
   <div class="screen" id="screen-player-role">
     <div class="card">
       <div class="phase-bar" id="player-phase-bar"></div>
-      <div class="info-box" id="player-status-box" style="display:none"></div>
       <div class="info-box" id="mayorBox" style="display:none"></div>
 
       <!-- Town Hall: gather call, ballot and chalk slate -->
@@ -1177,6 +1239,11 @@
         <div class="info-box blue">👻 You are a Ghost. You have no night action, but you have one final vote. Use it at any Town Hall, or save it for later.</div>
       </div>
     </div>
+  </div>
+
+  <!-- ====== GAME OVER SCREEN (everyone) ====== -->
+  <div class="screen" id="screen-result">
+    <div id="result-content"></div>
   </div>
 
   <!-- ====== GM SCREEN ====== -->
@@ -1721,18 +1788,6 @@ function pendingPlayers(game) {
   return getLivingPlayers(game).filter(p => ROLES[p.role]?.hasAction && !p.actionSubmitted && !abilitySpent(p, game));
 }
 
-const WIN_TEXT = {
-  village: '🎉 <strong>The Villagers win!</strong> All werewolves have been eliminated.',
-  wolf: '🐺 <strong>The Werewolves win!</strong> They have taken the village.',
-  jester: '🃏 <strong>The Jester wins!</strong> The village voted them out — exactly as planned.'
-};
-
-const WIN_BANNER = {
-  village: '🎉 Villagers Win!',
-  wolf: '🐺 Werewolves Win!',
-  jester: '🃏 The Jester Wins!'
-};
-
 // ============================================================
 // SESSION — remembers your game so a page refresh doesn't lose it
 // ============================================================
@@ -1899,6 +1954,7 @@ async function pollGame() {
     pendingAction = { type: null };
     hideRoleCard();
     if (inTownHall && !state.isGM) navigator.vibrate?.(300);
+    if (game.phase === 'ended' && !state.isGM) navigator.vibrate?.([200, 100, 200]);
   }
 
   if (state.isGM) {
@@ -1928,10 +1984,15 @@ function renderPlayer(game) {
     return;
   }
 
+  if (game.phase === 'ended') {
+    showScreen('result');
+    renderResult(game, { ...me, id: state.playerId });
+    return;
+  }
+
   // Role assigned — show role screen
   showScreen('player-role');
   const role = ROLES[me.role];
-  const statusBox = document.getElementById('player-status-box');
   const actionArea = document.getElementById('playerActionArea');
   const ghostArea = document.getElementById('playerGhostArea');
   const townHallArea = document.getElementById('playerTownHallArea');
@@ -2001,16 +2062,6 @@ function renderPlayer(game) {
   renderPhaseBar(game);
   const votingNow = game.phase === 'townhall' && townHallStage(game) === 'voting';
   document.getElementById('roleCard').classList.toggle('tall', !votingNow);
-
-  // Game over
-  statusBox.style.display = game.phase === 'ended' ? 'block' : 'none';
-  if (game.phase === 'ended') {
-    statusBox.innerHTML = WIN_TEXT[game.winner] || 'The game has ended.';
-    actionArea.style.display = 'none';
-    ghostArea.style.display = 'none';
-    townHallArea.style.display = 'none';
-    return;
-  }
 
   // Town Hall — everyone votes, ghosts included
   townHallArea.style.display = game.phase === 'townhall' ? 'block' : 'none';
@@ -2575,6 +2626,12 @@ function formatScript(text) {
 // ============================================================
 
 function renderGm(game) {
+  if (game.phase === 'ended') {
+    showScreen('result');
+    renderResult(game, null);
+    return;
+  }
+  if (!document.getElementById('screen-gm').classList.contains('active')) showScreen('gm');
   updateGmPhaseBanner(game);
 
   // Lobby shows just the room code and role setup
@@ -2586,9 +2643,6 @@ function renderGm(game) {
       : 'Waiting for players to join…';
   }
 
-  if (game.phase === 'ended' && WIN_BANNER[game.winner]) {
-    document.getElementById('gm-phase-banner').textContent = WIN_BANNER[game.winner];
-  }
   document.getElementById('gm-lobby-backup').textContent =
     `GM code: ${gmCode(game)}. Note it down: if this phone dies, use it with the room code to carry on from another phone.`;
   renderGmPlayerList(game);
@@ -3028,6 +3082,95 @@ window.advanceToNight = async function() {
 window.endGame = async function() {
   if (!await askConfirm('End the game?')) return;
   if (!await saveGame({ phase: 'ended' })) return;
+  pollGame();
+};
+
+// ============================================================
+// GAME OVER — the result is the centrepiece
+// ============================================================
+
+const RESULT_HEADLINES = {
+  village: { emoji: '🏡', title: 'The Village Wins', sub: 'Every werewolf has been found.' },
+  wolf: { emoji: '🐺', title: 'The Werewolves Win', sub: 'They have taken the village.' },
+  jester: { emoji: '🃏', title: 'The Jester Wins', sub: 'Voted out, exactly as planned.' }
+};
+const CAST_HEADINGS = { wolf: '🐺 Werewolves', village: '🏡 Village', jester: '🃏 Jester' };
+
+// What the end of the game means for one player. Teams win together; the Symbiote and Jester play for themselves.
+function personalResult(game, p) {
+  const winner = game.winner;
+  if (!winner) return { won: null, line: 'The Game Master ended the game early.' };
+  if (p.role === 'symbiote') {
+    const bond = game.symbiote;
+    const host = bond && game.players?.[bond.bId];
+    if (!host) return { won: false, line: 'You never bonded with anyone.' };
+    return host.eliminated
+      ? { won: false, line: `${host.name} didn't survive, so you lose.` }
+      : { won: true, line: `${host.name} survived to the end, so you win.` };
+  }
+  if (p.role === 'jester') {
+    if (winner === 'jester') return { won: true, line: 'You got yourself voted out. Exactly as planned.' };
+    return { won: false, line: p.eliminated ? 'You died before the village could vote you out.' : 'Nobody voted you out.' };
+  }
+  if (winner === ROLES[p.role]?.team) {
+    return { won: true, line: p.eliminated ? "Your team won, but you didn't make it to the end." : '🏆 You survived to the end.' };
+  }
+  return { won: false, line: p.eliminated ? 'Your team lost.' : 'You survived, but your team lost.' };
+}
+
+// The big result, your own result (players only) and everyone's role by team, winners first
+function renderResult(game, me) {
+  const head = RESULT_HEADLINES[game.winner];
+  const players = getPlayerList(game);
+  let html = `<div class="result-hero win-${head ? game.winner : 'none'}${players.length > 12 ? ' compact' : ''}">
+    <div class="result-emoji">${head?.emoji || '🏁'}</div>
+    <div class="result-title">${head?.title || 'Game Over'}</div>
+    <div class="result-sub">${head?.sub || 'The Game Master ended the game.'}</div>
+  </div>`;
+
+  if (me) {
+    const result = personalResult(game, me);
+    const role = ROLES[me.role];
+    html += `<div class="result-you${result.won ? ' won' : ''}">
+      ${result.won === null ? '' : `<div class="you-big">${result.won ? 'You Won' : 'You Lost'}</div>`}
+      <div>${esc(result.line)}</div>
+      <div class="text-small text-mist">You were the ${role?.emoji || ''} ${esc(role?.name || me.role)}.</div>
+    </div>`;
+  }
+
+  const teams = Object.keys(CAST_HEADINGS);
+  const order = [game.winner, ...teams.filter(t => t !== game.winner)].filter(t => teams.includes(t));
+  order.forEach(team => {
+    const members = players.filter(p => teamOf(game, p) === team);
+    if (!members.length) return;
+    html += `<div class="cast-team team-${team}"><div class="cast-heading">${CAST_HEADINGS[team]}</div><div class="cast-grid${players.length > 12 ? ' three' : ''}">` +
+      members.map(p => {
+        const role = ROLES[p.role];
+        const host = p.role === 'symbiote' && game.symbiote?.aId === p.id ? ` → ${esc(game.symbiote.bName)}` : '';
+        return `<div class="cast-row${p.eliminated ? ' dead' : ''}">
+          <span class="cast-name">${p.eliminated ? '💀 ' : ''}${esc(p.name)}</span>
+          <span class="cast-role">${role?.emoji || ''} ${esc(role?.name || p.role)}${host}</span>
+        </div>`;
+      }).join('') + `</div></div>`;
+  });
+
+  if (state.isGM) html += `<button class="btn btn-gold mt-8" onclick="playAgain()">Play Again with the Same Players</button>`;
+  document.getElementById('result-content').innerHTML = html;
+}
+
+// A fresh game in the same room: everyone keeps their place and the GM code stays the same
+window.playAgain = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || !await askConfirm('Start a new game with the same players? Roles will be dealt again.')) return;
+  const players = {};
+  getPlayerList(game).forEach(p => {
+    players[p.id] = { name: p.name, eliminated: false, wounded: false, actionSubmitted: false, actionUsed: false, witchHeal: true, witchPoison: true };
+  });
+  if (!await fbSet(`games/${state.roomCode}`, { phase: 'lobby', round: 0, createdAt: game.createdAt, players })) {
+    toast(SAVE_FAILED, 4000);
+    return;
+  }
+  toast('New game ready. Set the roles and start.');
   pollGame();
 };
 
