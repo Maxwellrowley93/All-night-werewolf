@@ -961,6 +961,33 @@
   .cast-name { font-size: 15px; font-weight: 600; }
   .cast-role { font-size: 12px; color: var(--mist); }
 
+  /* The wolf count and the Final countdown, under the tracker */
+  .status-line { margin: -2px 0 6px; text-align: center; font-size: 12px; color: var(--mist); }
+  #app.in-game #screen-gm .status-line { font-size: calc(12px * var(--gm)); }
+  #app.in-game .toggle-row.final-setting { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+
+  /* The Final's reveal: each survivor's team fills their screen */
+  #identity-screen { display: none; position: fixed; inset: 0; z-index: 2000; cursor: pointer; }
+  #identity-screen.show { display: flex; align-items: center; justify-content: center; }
+  #identity-screen.identity-wolf { background: radial-gradient(circle, #B02020, #3A0505); color: #FFF0F0; }
+  #identity-screen.identity-village { background: radial-gradient(circle, #3E8E3E, #0E2A0E); color: #F0FFF0; }
+  #identity-screen.identity-jester { background: radial-gradient(circle, #8E4EB0, #2A0E3A); color: #FBF0FF; }
+  #identity-screen.identity-symbiote { background: radial-gradient(circle, #A8862E, #2E2208); color: #FFF8E6; }
+  .identity-card { padding: 24px; text-align: center; }
+  .identity-big {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: min(13vw, 11vh);
+    font-weight: 700;
+    line-height: 1.1;
+    text-shadow: 0 0 20px rgba(255,255,255,0.4);
+  }
+  .identity-small { margin-top: 12px; font-size: min(6vw, 5vh); }
+  .identity-hint { margin-top: 24px; font-size: 14px; font-style: italic; opacity: 0.7; }
+  .btn.reveal-me { padding: 24px 12px; font-size: 18px; }
+  /* The Final's End vote has only two choices, so they can be big */
+  #app.in-game .end-choices .action-card { padding: 26px 6px; }
+  #app.in-game .end-choices .action-card .action-name { font-size: 20px; }
+
   /* GM: a single player's panel replaces the tabs until Back is tapped */
   #screen-gm.gm-player-open .gm-tabs,
   #screen-gm.gm-player-open .gm-panel { display: none; }
@@ -1192,6 +1219,7 @@
   <div class="screen" id="screen-player-role">
     <div class="card">
       <div class="phase-bar" id="player-phase-bar"></div>
+      <div class="status-line" id="playerStatusLine"></div>
       <div class="info-box" id="mayorBox" style="display:none"></div>
 
       <!-- Town Hall: gather call, ballot and chalk slate -->
@@ -1249,6 +1277,7 @@
   <!-- ====== GM SCREEN ====== -->
   <div class="screen" id="screen-gm">
     <div class="phase-banner phase-lobby" id="gm-phase-banner">Lobby</div>
+    <div class="status-line" id="gmStatusLine"></div>
 
     <div class="gm-tabs">
       <button class="gm-tab active" onclick="switchGmTab('players')" id="tab-players">Players</button>
@@ -1324,6 +1353,15 @@
         <h2>Role Setup</h2>
         
         <div id="role-setup-controls" class="role-setup-grid"></div>
+        <div class="toggle-row final-setting">
+          <div class="toggle-label">🏁 Final begins at</div>
+          <div class="count-control">
+            <button class="count-btn" onclick="adjustFinalAt(-1)">−</button>
+            <span class="count-val" id="final-at-count">4</span>
+            <button class="count-btn" onclick="adjustFinalAt(1)">+</button>
+          </div>
+        </div>
+        <p class="text-mist text-small" id="final-at-note"></p>
         <div class="info-box mt-8" id="role-total"></div>
         <button class="btn btn-gold" id="assign-roles-btn" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
       </div>
@@ -1338,6 +1376,9 @@
 <div class="toast" id="toast"></div>
 
 <div id="slate-screen"></div>
+
+<!-- The Final's reveal: a survivor's team, full screen, to hold up -->
+<div id="identity-screen" onclick="toggleIdentity()"></div>
 
 <div id="confirm-modal">
   <div class="confirm-box">
@@ -1372,6 +1413,7 @@ let state = {
   pollInterval: null,
   lastHash: null,
   cardShown: false,
+  identityShown: false,
   phaseKey: null,
 };
 
@@ -1740,6 +1782,7 @@ function allVotesIn(game) {
 // Only dead villagers get a ghost vote. Dead wolves and the Jester have nothing left to vote for,
 // and nor does a Symbiote unless their host is a villager who is still alive.
 function hasGhostVote(p, game) {
+  if (game.finalOut?.[p.id]) return false;
   if (p.role === 'symbiote') {
     const host = game.symbiote?.aId === p.id ? game.players?.[game.symbiote.bId] : null;
     return !!host && !host.eliminated && teamOf(game, p) === 'village';
@@ -1756,6 +1799,7 @@ function canVote(p, game) {
 // What a ghost's phone says about their vote
 function ghostNote(p, game) {
   const talk = 'You can still talk and share your theories.';
+  if (game.finalOut?.[p.id]) return `You were banished in the Final, so you get no vote. ${talk}`;
   if (hasGhostVote(p, game)) {
     return p.ghostVoteRound
       ? `You've used your final vote. ${talk}`
@@ -1775,7 +1819,43 @@ function getVoters(game) {
 
 function townHallStage(game) {
   const stage = game.townHallStage || 'discussion';
-  return stage === 'voting' && allVotesIn(game) ? 'reveal' : stage;
+  if (stage === 'voting' && allVotesIn(game)) return 'reveal';
+  if (stage === 'endvote' && allEndVotesIn(game)) return 'endreveal';
+  return stage;
+}
+
+const isWerewolf = p => ROLES[p.role]?.team === 'wolf';
+
+// The Final: no more nights, only votes. It's due once the players left reach the number set at the start,
+// or the wolves equal everyone else.
+function finalDue(game) {
+  const living = getLivingPlayers(game);
+  const wolves = living.filter(isWerewolf).length;
+  return (!!game.finalAt && living.length <= game.finalAt) || wolves >= living.length - wolves;
+}
+
+// In the Final, the living choose whether to end the game. Only a majority ends it.
+function allEndVotesIn(game) {
+  return getLivingPlayers(game).every(p => game.endVotes?.[p.id]);
+}
+function endTally(game) {
+  const living = getLivingPlayers(game);
+  const end = living.filter(p => game.endVotes?.[p.id] === 'end').length;
+  const banish = living.filter(p => game.endVotes?.[p.id] === 'banish').length;
+  return { end, banish, undecided: living.length - end - banish, majorityEnd: end > living.length / 2 };
+}
+
+// "🐺 2 of 3 still hidden · 🏁 Final at 4 players · 7 left". Roles of anyone banished in the Final stay
+// secret, so once that happens the wolf count becomes "?".
+function statusLine(game) {
+  if (game.phase !== 'night' && game.phase !== 'townhall') return '';
+  const all = getPlayerList(game);
+  const total = all.filter(isWerewolf).length;
+  const caught = all.filter(p => isWerewolf(p) && p.eliminated && !game.finalOut?.[p.id]).length;
+  const wolves = game.finalOut ? `🐺 ? of ${total} still hidden` : `🐺 ${total - caught} of ${total} still hidden`;
+  const living = getLivingPlayers(game).length;
+  const final = game.final ? `🏁 The Final · ${living} left` : game.finalAt ? `🏁 Final at ${game.finalAt} players · ${living} left` : '';
+  return [wolves, final].filter(Boolean).join(' · ');
 }
 
 // Weighs the votes: a Bard-doubled voter counts twice, and the Scapegoat takes votes against their chosen player
@@ -2011,9 +2091,15 @@ function renderPlayer(game) {
     return;
   }
 
+  // Outside the Final's reveal, nobody's identity card is showing
+  if (!(game.phase === 'ended' && game.finalReveal)) {
+    state.identityShown = false;
+    showIdentity(false);
+  }
   if (game.phase === 'ended') {
     showScreen('result');
-    renderResult(game, { ...me, id: state.playerId });
+    if (game.finalReveal) renderSurvivorReveal(game, me);
+    else renderResult(game, me);
     return;
   }
 
@@ -2087,7 +2173,7 @@ function renderPlayer(game) {
   }
 
   renderPhaseBar(game);
-  const votingNow = game.phase === 'townhall' && townHallStage(game) === 'voting';
+  const votingNow = game.phase === 'townhall' && ['voting', 'endvote'].includes(townHallStage(game));
   document.getElementById('roleCard').classList.toggle('tall', !votingNow);
 
   // Town Hall — everyone votes, ghosts included
@@ -2109,6 +2195,7 @@ function renderPlayer(game) {
 }
 
 const PHASE_STEPS = ['night', 'discussion', 'voting', 'reveal', 'dawn'];
+const FINAL_STEPS = ['discussion', 'endvote', 'endreveal', 'voting', 'reveal'];
 
 function renderPhaseBar(game) {
   const bar = document.getElementById('player-phase-bar');
@@ -2116,9 +2203,11 @@ function renderPhaseBar(game) {
     bar.innerHTML = '<div class="phase-step current">Game Over</div>';
     return;
   }
-  const labels = { night: `Night ${esc(game.round)}`, discussion: 'Gather', voting: 'Vote', reveal: 'Banish', dawn: 'Dawn' };
-  const current = PHASE_STEPS.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
-  bar.innerHTML = PHASE_STEPS.map((step, i) =>
+  const labels = { night: `Night ${esc(game.round)}`, discussion: 'Gather', voting: 'Vote', reveal: 'Banish', dawn: 'Dawn', endvote: 'End?', endreveal: 'Decision' };
+  const steps = game.final ? FINAL_STEPS : PHASE_STEPS;
+  const current = steps.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
+  document.getElementById('playerStatusLine').textContent = statusLine(game);
+  bar.innerHTML = steps.map((step, i) =>
     `<div class="phase-step${i === current ? ' current' : i < current ? ' done' : ''}">${labels[step]}</div>`
   ).join('');
 }
@@ -2326,10 +2415,20 @@ function renderTownHallArea(game, me) {
   const stage = townHallStage(game);
 
   if (stage === 'discussion') {
-    area.innerHTML = `<div class="gather-alert">
-      <div class="gather-title">🔔 Gather!</div>
-      <div>Everyone to the Town Hall meeting, now.</div>
-    </div>`;
+    area.innerHTML = game.final
+      ? `<div class="gather-alert">
+          <div class="gather-title">🏁 The Final</div>
+          <div>Everyone gather. No more nights: only votes from now on.</div>
+        </div>`
+      : `<div class="gather-alert">
+          <div class="gather-title">🔔 Gather!</div>
+          <div>Everyone to the Town Hall meeting, now.</div>
+        </div>`;
+    return;
+  }
+
+  if (stage === 'endvote' || stage === 'endreveal') {
+    area.innerHTML = endVoteArea(game, me);
     return;
   }
 
@@ -2365,6 +2464,42 @@ function renderTownHallArea(game, me) {
   area.innerHTML = buildVoteChoices(game, { ...me, id: state.playerId });
 }
 
+// The Final's End-or-Banish vote: the living choose secretly, then everyone shows their choice on the blackboard
+function endVoteArea(game, me) {
+  if (me.eliminated) return `<div class="submitted-banner">👻 The living are deciding whether to end the game.</div>`;
+  if (townHallStage(game) === 'endreveal') return '';
+  if (game.endVotes?.[state.playerId]) {
+    const waiting = getLivingPlayers(game).filter(p => !game.endVotes?.[p.id]).length;
+    return `<div class="submitted-banner">🔒 Choice locked in. Waiting for ${waiting} more…</div>`;
+  }
+  return buildEndVoteChoices(game, me);
+}
+
+// The two choices and the Confirm button. The GM uses this too, to choose for a player.
+function buildEndVoteChoices(game, voter) {
+  const question = voter.id !== state.playerId
+    ? `Does ${esc(voter.name)} want to end the game, or banish again?`
+    : 'End the game now, or banish again? If a Werewolf is still among you when it ends, the Werewolves win.';
+  const options = [{ id: 'end', name: 'END', label: '🏁 End the game' }, { id: 'banish', name: 'BANISH', label: '🗳️ Banish again' }];
+  return `<p class="text-mist text-small" style="margin-bottom:8px">${question}</p>` +
+    `<div class="end-choices">${buildTargetGrid(options, 'endvote', { button: false })}</div>` +
+    `<button class="btn btn-primary mt-16 confirm-action-btn" data-type="endvote" onclick="submitEndVote()"${canConfirm('endvote') ? '' : ' disabled'}>Confirm</button>`;
+}
+
+window.submitEndVote = async function() {
+  if (!canConfirm('endvote')) return;
+  const choice = pendingAction.targetId;
+  document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
+  if (!await saveGame({ [`endVotes/${actorId()}`]: choice })) {
+    document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
+    return;
+  }
+  pendingAction = { type: null };
+  gmChangingVote = false;
+  toast(gmPlayerId ? `Choice saved for ${state.gameData.players[gmPlayerId]?.name}` : 'Choice locked in');
+  pollGame();
+};
+
 // The names and buttons for one player's vote. The GM uses this too, to vote for a player.
 function buildVoteChoices(game, voter) {
   const forGm = voter.id !== state.playerId;
@@ -2385,16 +2520,25 @@ function buildVoteChoices(game, voter) {
 // The blackboard covers the whole screen and shows only the name, so nothing else can be seen when it's held up
 function renderSlateScreen(game, me) {
   const screen = document.getElementById('slate-screen');
-  const myVote = game.votes?.[state.playerId];
-  const hasSlate = myVote ? !myVote.saved : !me.eliminated;
-  const show = game.phase === 'townhall' && townHallStage(game) === 'reveal' && canVote(me, game) && hasSlate;
+  const stage = game.phase === 'townhall' ? townHallStage(game) : null;
+  let name = null;
+  if (stage === 'reveal') {
+    const myVote = game.votes?.[state.playerId];
+    const hasSlate = myVote ? !myVote.saved : !me.eliminated;
+    if (canVote(me, game) && hasSlate) name = myVote?.targetName || 'No vote';
+  }
+  // The Final's decision: each living player's END or BANISH
+  if (stage === 'endreveal' && !me.eliminated) {
+    const choice = game.endVotes?.[state.playerId];
+    name = choice ? choice.toUpperCase() : 'No choice';
+  }
+  const show = name !== null;
   screen.classList.toggle('show', show);
   document.body.style.overflow = show ? 'hidden' : '';
   if (!show) {
     screen.dataset.name = '';
     return;
   }
-  const name = myVote?.targetName || 'No vote';
   if (screen.dataset.name === name) return;
   screen.dataset.name = name;
   screen.innerHTML = `<div class="slate-board" style="--chars:${name.length}">${esc(name)}</div>`;
@@ -2656,11 +2800,13 @@ function formatScript(text) {
 function renderGm(game) {
   if (game.phase === 'ended') {
     showScreen('result');
-    renderResult(game, null);
+    if (game.finalReveal) renderSurvivorReveal(game, null);
+    else renderResult(game, null);
     return;
   }
   if (!document.getElementById('screen-gm').classList.contains('active')) showScreen('gm');
   updateGmPhaseBanner(game);
+  document.getElementById('gmStatusLine').textContent = statusLine(game);
 
   // Lobby shows just the room code and role setup
   document.getElementById('screen-gm').classList.toggle('gm-lobby', game.phase === 'lobby');
@@ -2688,13 +2834,20 @@ const TOWN_HALL_BANNER = {
   reveal: '🪧 Town Hall — banish',
   dawn: '🌅 Dawn'
 };
+const FINAL_BANNER = {
+  discussion: '🏁 The Final — gather',
+  endvote: '🏁 The Final — end or banish?',
+  endreveal: '🏁 The Final — the decision',
+  voting: '🏁 The Final — voting',
+  reveal: '🏁 The Final — banish'
+};
 
 function updateGmPhaseBanner(game) {
   const { phase, round } = game;
   const b = document.getElementById('gm-phase-banner');
   if (phase === 'lobby') { b.className='phase-banner phase-lobby'; b.textContent='⏳ Lobby'; }
   else if (phase === 'night') { b.className='phase-banner phase-night'; b.textContent=`🌙 Night ${round||''} Active`; }
-  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent=TOWN_HALL_BANNER[townHallStage(game)]; }
+  else if (phase === 'townhall') { b.className='phase-banner phase-townhall'; b.textContent=(game.final ? FINAL_BANNER : TOWN_HALL_BANNER)[townHallStage(game)]; }
   else if (phase === 'ended') { b.className='phase-banner phase-lobby'; b.textContent='🏁 Game Over'; }
 }
 
@@ -2743,7 +2896,9 @@ function renderGmPhaseControls(game) {
   } else if (game.phase === 'townhall') {
     html = `
       ${townHallNextButton(game)}
-      <button class="btn btn-danger mt-8" onclick="endGame()">End Game</button>
+      ${game.final
+        ? '<button class="btn btn-danger mt-8" onclick="declareStalemate()">Declare Stalemate &amp; End the Game</button>'
+        : '<button class="btn btn-danger mt-8" onclick="endGame()">End Game</button>'}
     `;
   } else if (game.phase === 'ended') {
     html = `<p class="text-mist text-small">The game is over. Tap "Leave game" below to start a new one.</p>`;
@@ -2820,10 +2975,24 @@ function actionDescription(a) {
 // The button that moves Town Hall on to its next step
 function townHallNextButton(game) {
   const stage = townHallStage(game);
+  if (game.final) {
+    if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openEndVote()">Open the End Vote 🏁</button>`;
+    if (stage === 'endvote') return `<button class="btn btn-secondary" onclick="closeEndVote()">Close the End Vote &amp; Reveal</button>`;
+    if (stage === 'endreveal') {
+      return endTally(game).majorityEnd
+        ? `<button class="btn btn-gold mt-8" onclick="endTheFinal()">End the Game 🏁</button>`
+        : `<button class="btn btn-gold mt-8" onclick="openVoting()">Banish Someone 🗳️</button>`;
+    }
+    if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
+    return `<button class="btn btn-gold mt-8" onclick="nextFinalRound()">Next Round of the Final ▶</button>`;
+  }
   if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openVoting()">Open the Floor to Voting 🗳️</button>`;
   if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
   if (stage === 'reveal') return `<button class="btn btn-gold mt-8" onclick="advanceToDawn()">Move On — Go to Dawn 🌅</button>`;
-  return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${esc(game.round + 1)} 🌙</button>`;
+  // Dawn: once the Final is due there are no more nights
+  if (finalDue(game)) return `<button class="btn btn-gold" onclick="beginFinal()">Begin the Final 🏁</button>`;
+  return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${esc(game.round + 1)} 🌙</button>
+    <button class="btn btn-secondary mt-8" onclick="beginFinal()">Begin the Final Early</button>`;
 }
 
 function renderGmVoting(game) {
@@ -2864,7 +3033,31 @@ function renderGmVoting(game) {
 
   if (stage === 'discussion') {
     voteList.innerHTML = '';
-    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Everyone has been told to gather. Read the script, let the village talk, then open the floor.</p>` + townHallNextButton(game);
+    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Everyone has been told to gather. Read the script, let the village talk, then ${game.final ? 'open the End vote' : 'open the floor'}.</p>` + townHallNextButton(game);
+    return;
+  }
+
+  // The Final's End-or-Banish vote: who has chosen, then everyone's choice
+  if (stage === 'endvote') {
+    const living = getLivingPlayers(game);
+    const cast = living.filter(p => game.endVotes?.[p.id]).length;
+    voteList.innerHTML = `<div class="flex-between" style="margin-bottom:8px"><span class="text-mist text-small">Choices stay hidden until everyone has chosen</span><span class="badge">${cast} / ${living.length}</span></div>` +
+      `<div class="compact-grid">` + living.map(p => `<div class="player-row"><span class="player-name">${esc(p.name)}</span><span>${game.endVotes?.[p.id] ? '✓' : '⏳'}</span></div>`).join('') + `</div>`;
+    controls.innerHTML = townHallNextButton(game);
+    return;
+  }
+  if (stage === 'endreveal') {
+    const { end, banish, undecided, majorityEnd } = endTally(game);
+    voteList.innerHTML = '<p class="text-mist text-small" style="margin-bottom:4px">Call each name in turn. Each player holds up their phone. Tap a choice to change it.</p><div class="compact-grid">' +
+      getLivingPlayers(game).map(p => {
+        const choice = game.endVotes?.[p.id];
+        return `<div class="chalkboard tappable" data-id="${esc(p.id)}" onclick="openPlayerPanel(this.dataset.id)">
+          <div class="slate-from">${esc(p.name)} chose</div>
+          <div class="slate-name">${choice ? choice.toUpperCase() : '—'}</div>
+        </div>`;
+      }).join('') + '</div>';
+    controls.innerHTML = `<div class="tally"><span class="badge">🏁 END <strong>${end}</strong></span><span class="badge">🗳️ BANISH <strong>${banish}</strong></span>${undecided ? `<span class="badge">No choice <strong>${undecided}</strong></span>` : ''}</div>
+      <div class="info-box warning">${majorityEnd ? 'A majority chose to END. The game is over.' : 'No majority to end, so banish again.'}</div>` + townHallNextButton(game);
     return;
   }
 
@@ -2878,7 +3071,7 @@ function renderGmVoting(game) {
 
   if (stage === 'dawn') {
     voteList.innerHTML = '';
-    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Read the script, then start the next night.</p>` + townHallNextButton(game);
+    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Read the script, then ${finalDue(game) ? 'begin the Final' : 'start the next night'}.</p>` + townHallNextButton(game);
     return;
   }
 
@@ -2894,8 +3087,12 @@ function renderGmVoting(game) {
     const out = getPlayerList(game).find(p => p.name === game.votedOut);
     const bond = game.symbiote;
     const partner = bond && out && out.id === bond.bId ? game.players[bond.aId] : null;
-    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleReveal(out, game))}</strong>.` +
-      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleReveal({ ...partner, id: bond.aId }, game))}</strong>.` : '') + `</div>`;
+    ctrlHtml = game.final
+      // In the Final, roles stay secret until the very end
+      ? `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been banished. Don't reveal their role: in the Final it stays secret until the end.` +
+        (partner ? `<br>🔗 ${esc(partner.name)} goes with them.` : '') + `</div>`
+      : `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleReveal(out, game))}</strong>.` +
+        (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleReveal({ ...partner, id: bond.aId }, game))}</strong>.` : '') + `</div>`;
   } else {
     ctrlHtml = `<div class="tally">` + getLivingPlayers(game).filter(p => totals[p.id] > 0).sort((a, b) => totals[b.id] - totals[a.id])
       .map(p => `<span class="badge">${esc(p.name)} <strong>${totals[p.id]}</strong></span>`).join('') + `</div>`;
@@ -2949,10 +3146,11 @@ window.startTiebreak = async function() {
 async function endGameIfWon() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase === 'ended') return;
-  const winner = checkWinCondition(getPlayerList(game));
-  // Attacks still to land could change who has the numbers, so wolves can only win once they have
-  if (winner === 'wolf' && game.phase === 'townhall' && game.townHallStage !== 'dawn') return;
-  if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner });
+  const winner = checkWinCondition(game);
+  // Before the Final, attacks still to land could change who has the numbers, so wolves can only win once they have
+  if (winner === 'wolf' && !game.final && game.phase === 'townhall' && game.townHallStage !== 'dawn') return;
+  // A Final that ends this way still finishes with the survivors' reveal
+  if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner, ...(game.final ? { finalReveal: true } : {}) });
 }
 
 async function eliminate(playerId, extraUpdates = {}) {
@@ -2961,6 +3159,8 @@ async function eliminate(playerId, extraUpdates = {}) {
   if (!player || player.eliminated) return;
 
   const updates = { ...extraUpdates, [`players/${playerId}/eliminated`]: true };
+  // Anyone out in the Final keeps their role secret until the end
+  if (game.final) updates[`finalOut/${playerId}`] = true;
 
   // Symbiote — when their host is eliminated, they go too
   let partnerName = null;
@@ -2969,6 +3169,7 @@ async function eliminate(playerId, extraUpdates = {}) {
     const symbiote = game.players?.[bond.aId];
     if (symbiote && !symbiote.eliminated) {
       updates[`players/${bond.aId}/eliminated`] = true;
+      if (game.final) updates[`finalOut/${bond.aId}`] = true;
       partnerName = symbiote.name;
     }
   }
@@ -3107,6 +3308,88 @@ window.advanceToNight = async function() {
   pollGame();
 };
 
+// ============================================================
+// THE FINAL — no more nights: end the game, or banish again
+// ============================================================
+
+function finalScript(game) {
+  return [
+    `"The Final has begun. ${getLivingPlayers(game).length} of you remain, and there will be no more nights."`,
+    '"From now on, the village decides together: end the game, or banish again. If a Werewolf is still among you when it ends, the Werewolves win."',
+    '',
+    "[NOTE: In the Final, banished players' roles stay secret until the very end.]"
+  ].join('\n');
+}
+
+window.beginFinal = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'townhall') return;
+  if (!finalDue(game) && !await askConfirm('Begin the Final early? There will be no more nights: only votes from now on.')) return;
+  if (!await saveGame({
+    final: true,
+    round: (game.round || 0) + 1,
+    townHallStage: 'discussion',
+    votes: null,
+    endVotes: null,
+    tiebreak: null,
+    votedOut: null,
+    bardDoubled: null,
+    scapegoatRedirect: null,
+    gmScript: finalScript(game)
+  })) return;
+  toast('The Final has begun 🏁');
+  pollGame();
+};
+
+window.openEndVote = async function() {
+  if (!await saveGame({ townHallStage: 'endvote', endVotes: null, votes: null, tiebreak: null })) return;
+  toast('The End vote is open 🏁');
+  pollGame();
+};
+
+window.closeEndVote = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game) return;
+  const missing = getLivingPlayers(game).filter(p => !game.endVotes?.[p.id]);
+  if (missing.length && !await askConfirm(`Still waiting on: ${missing.map(p => p.name).join(', ')}.\n\nClose the vote anyway? Anyone who hasn't chosen doesn't count towards ending the game.`)) return;
+  if (!await saveGame({ townHallStage: 'endreveal' })) return;
+  pollGame();
+};
+
+window.nextFinalRound = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'townhall') return;
+  const { leaders } = tallyVotes(game);
+  if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been banished.\n\nMove on anyway?`)) return;
+  if (!await saveGame({
+    round: (game.round || 0) + 1,
+    townHallStage: 'discussion',
+    votes: null,
+    endVotes: null,
+    tiebreak: null,
+    votedOut: null,
+    gmScript: `"The Final goes on. ${getLivingPlayers(game).length} of you remain. Talk it over, then decide: end the game, or banish again?"`
+  })) return;
+  pollGame();
+};
+
+// The Final ends with whoever is still standing: any Werewolf among them means the wolves win
+async function finishFinal() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase === 'ended') return;
+  const winner = getLivingPlayers(game).some(isWerewolf) ? 'wolf' : 'village';
+  if (!await saveGame({ phase: 'ended', winner, finalReveal: true })) return;
+  pollGame();
+}
+
+window.endTheFinal = async function() {
+  if (await askConfirm('End the game now? The survivors will reveal who they are.')) await finishFinal();
+};
+
+window.declareStalemate = async function() {
+  if (await askConfirm('Declare a stalemate? The game ends with the players still standing, and they reveal who they are.')) await finishFinal();
+};
+
 window.endGame = async function() {
   if (!await askConfirm('End the game?')) return;
   if (!await saveGame({ phase: 'ended' })) return;
@@ -3186,6 +3469,73 @@ function renderResult(game, me) {
   document.getElementById('result-content').innerHTML = html;
 }
 
+// ============================================================
+// THE FINAL'S REVEAL — survivors show who they are, one at a time
+// ============================================================
+// Every survivor's phone has a button. When the GM calls their name, they tap it and their phone fills with their team.
+
+function identityOf(game, p) {
+  const role = ROLES[p.role];
+  if (p.role === 'symbiote') {
+    const team = teamOf(game, p);
+    return { kind: 'symbiote', big: '🔗 Symbiote', small: team === 'wolf' ? 'Not a Werewolf, but on their side' : team === 'jester' ? "On the Jester's side" : 'On the village side' };
+  }
+  if (role?.team === 'wolf') return { kind: 'wolf', big: '🐺 Werewolf', small: '' };
+  if (role?.team === 'jester') return { kind: 'jester', big: '🃏 Jester', small: '' };
+  return { kind: 'village', big: '🏡 Villager', small: p.role === 'villager' ? '' : `${role?.emoji || ''} ${role?.name || p.role}` };
+}
+
+function showIdentity(show, identity) {
+  const screen = document.getElementById('identity-screen');
+  if (!show) {
+    screen.className = '';
+    screen.innerHTML = '';
+    return;
+  }
+  screen.className = `show identity-${identity.kind}`;
+  screen.innerHTML = `<div class="identity-card">
+    <div class="identity-big">${identity.big}</div>
+    ${identity.small ? `<div class="identity-small">${esc(identity.small)}</div>` : ''}
+    <div class="identity-hint">Tap to hide</div>
+  </div>`;
+}
+
+window.toggleIdentity = function() {
+  state.identityShown = !state.identityShown;
+  if (state.gameData) renderPlayer(state.gameData);
+};
+
+function renderSurvivorReveal(game, me) {
+  const survivors = getLivingPlayers(game);
+  const isSurvivor = me && !me.eliminated;
+  let html = `<div class="result-hero win-none">
+    <div class="result-emoji">🏁</div>
+    <div class="result-title">The Final Is Over</div>
+    <div class="result-sub">${isSurvivor ? 'When the Game Master calls your name, reveal who you are.' : 'The survivors are about to reveal who they are.'}</div>
+  </div>`;
+
+  if (isSurvivor) {
+    html += `<button class="btn btn-gold reveal-me" onclick="toggleIdentity()">Reveal Who I Am</button>`;
+  } else if (me) {
+    html += `<p class="text-mist" style="text-align:center">Survivors: ${esc(survivors.map(p => p.name).join(', '))}</p>`;
+  } else {
+    // The GM already knows: call each survivor in turn, then show everyone the result
+    html += `<p class="text-mist text-small" style="margin-bottom:6px">Call each survivor in turn. They tap their phone and hold it up.</p><div class="cast-grid">` +
+      survivors.map(p => {
+        const identity = identityOf(game, p);
+        return `<div class="cast-row"><span class="cast-name">${esc(p.name)}</span><span class="cast-role">${identity.big}${identity.small ? ` · ${esc(identity.small)}` : ''}</span></div>`;
+      }).join('') + `</div>
+      <button class="btn btn-gold mt-16" onclick="showFinalResult()">Show the Result 🏆</button>`;
+  }
+  document.getElementById('result-content').innerHTML = html;
+  if (me) showIdentity(isSurvivor && state.identityShown, identityOf(game, me));
+}
+
+window.showFinalResult = async function() {
+  if (!await saveGame({ finalReveal: null })) return;
+  pollGame();
+};
+
 // A fresh game in the same room: everyone keeps their place and the GM code stays the same
 window.playAgain = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
@@ -3241,7 +3591,8 @@ function renderPlayerPanel(game) {
 
   if (game.phase === 'night' && !p.eliminated) sections.push(gmActionSection(game, player));
   const stage = game.phase === 'townhall' ? townHallStage(game) : null;
-  if ((stage === 'voting' || stage === 'reveal') && canVote(p, game)) sections.push(gmVoteSection(game, player));
+  if ((stage === 'voting' || stage === 'reveal') && canVote(player, game)) sections.push(gmVoteSection(game, player));
+  if ((stage === 'endvote' || stage === 'endreveal') && !p.eliminated) sections.push(gmEndVoteSection(game, player));
   if (p.eliminated) {
     sections.push(`<button class="btn btn-secondary mt-8" onclick="revivePlayer()">Bring ${esc(p.name)} Back (Undo Elimination)</button>`);
   }
@@ -3286,10 +3637,12 @@ function gmVoteSection(game, player) {
 
 window.changePlayerVote = function() {
   gmChangingVote = true;
+  const stage = townHallStage(state.gameData);
   const vote = state.gameData.votes?.[gmPlayerId];
-  // At the reveal the GM already sees this vote, so start from it. While voting is open it stays secret.
-  pendingAction = townHallStage(state.gameData) === 'reveal' && vote?.targetId
-    ? { type: 'vote', targetId: vote.targetId, targetName: vote.targetName }
+  const choice = state.gameData.endVotes?.[gmPlayerId];
+  // At a reveal the GM already sees this vote, so start from it. While voting is open it stays secret.
+  pendingAction = stage === 'reveal' && vote?.targetId ? { type: 'vote', targetId: vote.targetId, targetName: vote.targetName }
+    : stage === 'endreveal' && choice ? { type: 'endvote', targetId: choice, targetName: choice.toUpperCase() }
     : { type: null };
   renderPlayerPanel(state.gameData);
   fitScreen();
@@ -3301,6 +3654,22 @@ window.keepPlayerVote = function() {
   renderPlayerPanel(state.gameData);
   fitScreen();
 };
+
+// The Final's End vote, entered or changed for a player. As with votes, choices stay secret until the reveal.
+function gmEndVoteSection(game, player) {
+  const name = esc(player.name);
+  const choice = game.endVotes?.[player.id];
+  if (!choice) return buildEndVoteChoices(game, player);
+  const current = townHallStage(game) === 'endreveal'
+    ? `🪧 ${name} chose <strong>${choice.toUpperCase()}</strong>.`
+    : `🔒 ${name} has chosen.`;
+  if (gmChangingVote) {
+    return `<div class="submitted-banner">${current}</div>` + buildEndVoteChoices(game, player) +
+      `<button class="btn btn-secondary mt-8" onclick="keepPlayerVote()">Keep This Choice</button>`;
+  }
+  return `<div class="submitted-banner">${current}</div>
+    <button class="btn btn-secondary mt-8" onclick="changePlayerVote()">Change Their Choice</button>`;
+}
 
 window.clearPlayerAction = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
@@ -3331,7 +3700,7 @@ window.revivePlayer = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   const player = game?.players?.[gmPlayerId];
   if (!player?.eliminated || !await askConfirm(`Bring ${player.name} back into the game? Only do this to undo a mistake.`)) return;
-  const updates = { [`players/${gmPlayerId}/eliminated`]: false };
+  const updates = { [`players/${gmPlayerId}/eliminated`]: false, [`finalOut/${gmPlayerId}`]: null };
   if (game.votedOut === player.name) updates.votedOut = null;
   if (!await saveGame(updates)) return;
   toast(`${player.name} is back in the game`);
@@ -3357,12 +3726,17 @@ window.resumeAsGm = async function() {
   toast(`You're now running room ${code}`);
 };
 
-function checkWinCondition(players) {
-  const living = players.filter(p => !p.eliminated);
-  const wolves = living.filter(p => ROLES[p.role]?.team === 'wolf').length;
+function checkWinCondition(game) {
+  const living = getLivingPlayers(game);
+  const wolves = living.filter(isWerewolf).length;
 
+  // Wolves who outnumber everyone else control every vote, so nothing can stop them
+  if (wolves > living.length - wolves) return 'wolf';
+  // With two players left there's nothing more to vote on
+  if (living.length <= 2) return wolves ? 'wolf' : 'village';
+  // In the Final, roles are secret, so it only ends by vote or stalemate
+  if (game.final) return null;
   if (wolves === 0) return 'village';
-  if (wolves >= living.length - wolves) return 'wolf';
   return null;
 }
 
@@ -3427,7 +3801,22 @@ window.adjustRole = function(key, delta) {
   fitScreen();
 };
 
+// The Final's threshold: werewolves + 2, unless the GM picks a number
+let finalAtChoice = null;
+function finalAtValue() {
+  return finalAtChoice ?? (roleConfig.werewolf || 0) + 2;
+}
+window.adjustFinalAt = function(delta) {
+  finalAtChoice = Math.max(3, Math.min(20, finalAtValue() + delta));
+  updateRoleTotal();
+  fitScreen();
+};
+
 function updateRoleTotal() {
+  document.getElementById('final-at-count').textContent = finalAtValue();
+  document.getElementById('final-at-note').textContent = finalAtChoice === null
+    ? 'players left: werewolves + 2. Tap − or + to change it.'
+    : 'players left, set by you.';
   const el = document.getElementById('role-total');
   const total = Object.values(roleConfig).reduce((s,v)=>s+v,0);
   const players = state.gameData ? getPlayerList(state.gameData).length : 0;
@@ -3469,7 +3858,7 @@ window.assignRolesAndStart = async function() {
     [pool[i],pool[j]] = [pool[j],pool[i]];
   }
 
-  const updates = { phase: 'night', round: 1 };
+  const updates = { phase: 'night', round: 1, finalAt: finalAtValue() };
   players.forEach((p, i) => {
     updates[`players/${p.id}/role`] = pool[i];
     if (pool[i] === 'mayor') updates[`players/${p.id}/mayorRevealed`] = true;
