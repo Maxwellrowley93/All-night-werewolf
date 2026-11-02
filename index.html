@@ -964,6 +964,9 @@
   /* The wolf count and the Final countdown, under the tracker */
   .status-line { margin: -2px 0 6px; text-align: center; font-size: 12px; color: var(--mist); }
   #app.in-game #screen-gm .status-line { font-size: calc(12px * var(--gm)); }
+  .preset-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .preset-row .btn { flex: 1; }
+  #app.in-game .preset-row .btn + .btn { margin-top: 0; }
   #app.in-game .toggle-row.final-setting { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
 
   /* The Final's reveal: each survivor's team fills their screen */
@@ -1351,6 +1354,11 @@
 
       <div class="card">
         <h2>Role Setup</h2>
+        <div class="preset-row">
+          <span class="text-mist text-small">Quick setup:</span>
+          <button class="btn btn-secondary btn-sm" onclick="applyPreset('simple')">Simple</button>
+          <button class="btn btn-secondary btn-sm" onclick="applyPreset('advanced')">Advanced</button>
+        </div>
         
         <div id="role-setup-controls" class="role-setup-grid"></div>
         <div class="toggle-row final-setting">
@@ -3769,6 +3777,54 @@ const ONE_PER_GAME = ['mayor', 'bard', 'scapegoat', 'symbiote'];
 
 const defaultRoles = { werewolf: 2, villager: 3, seer: 1, doctor: 1 };
 let roleConfig = { ...defaultRoles };
+
+// Balanced line-ups for any number of players. Simple uses only the classic roles; Advanced adds
+// more protection to balance more wolves, plus about one chaos role for every six players.
+// Every wolf kills each night, so the village needs roughly one banishment per wolf before the Final.
+function presetRoles(kind, players) {
+  const roles = {};
+  const add = (key, count = 1) => { roles[key] = (roles[key] || 0) + count; };
+  if (kind === 'advanced' && players >= 5) {
+    if (players >= 17) {
+      add('werewolf', 4); add('seer', 2); add('doctor', 2);
+      ['witch', 'tank', 'hunter', 'mayor', 'bard'].forEach(key => add(key));
+      add('villager');
+      // Chaos roles join one at a time as the group grows
+      ['jester', 'puppetmaster', 'seductress', 'symbiote', 'scapegoat', 'hairy_villager'].slice(0, players - 14).forEach(key => add(key));
+    } else if (players >= 13) {
+      add('werewolf', 3); add('seer'); add('doctor', 2);
+      ['witch', 'tank', 'mayor', 'jester', 'seductress'].forEach(key => add(key));
+    } else if (players >= 9) {
+      add('werewolf', 2);
+      ['seer', 'doctor', 'witch', 'bard', 'jester', 'hairy_villager'].forEach(key => add(key));
+    } else if (players >= 7) {
+      add('werewolf');
+      ['seer', 'doctor', 'jester'].forEach(key => add(key));
+    } else {
+      add('werewolf'); add('seer'); add('doctor');
+    }
+  } else {
+    const [wolves, seers, doctors, hunters] =
+      players >= 18 ? [3, 2, 2, 1] : players >= 15 ? [3, 1, 2, 1] : players >= 13 ? [2, 1, 1, 1] :
+      players >= 9 ? [2, 1, 1, 0] : players >= 6 ? [1, 1, 1, 0] : players >= 4 ? [1, 1, 0, 0] : [1, 0, 0, 0];
+    add('werewolf', wolves); add('seer', seers); add('doctor', doctors); add('hunter', hunters);
+  }
+  // Villagers fill the rest. A count of 0 is dropped so the setup only lists roles in play.
+  const used = Object.values(roles).reduce((sum, n) => sum + n, 0);
+  if (players > used) add('villager', players - used);
+  Object.keys(roles).forEach(key => { if (!roles[key]) delete roles[key]; });
+  return roles;
+}
+
+window.applyPreset = function(kind) {
+  const players = state.gameData ? getPlayerList(state.gameData).length : 0;
+  if (!players) { toast('Wait for players to join first'); return; }
+  roleConfig = presetRoles(kind, players);
+  finalAtChoice = null;
+  buildRoleSetup();
+  fitScreen();
+  toast(`${kind === 'simple' ? 'Simple' : 'Advanced'} setup for ${players} players`);
+};
 
 function buildRoleSetup() {
   const container = document.getElementById('role-setup-controls');
