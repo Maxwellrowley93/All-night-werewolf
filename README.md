@@ -13,7 +13,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 4. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
-- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Reveal) and a face-down card.
+- Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Reveal, Dawn) and a face-down card.
 - Each player taps the card to see their role and their action, then taps again to hide it. The card also hides itself after they confirm an action, if they switch apps, and at each new stage of the game.
 - Werewolves see the rest of their pack on the card.
 - Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
@@ -21,20 +21,21 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 - On the **Actions** tab, the GM sees every action as it comes in, a step-by-step preview of how the night will play out, and the script that will be read.
 - On the **Players** tab, the GM taps **End Night → Call Everyone to Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first. Every phone then tells its player to gather.
 
-Deaths are applied as soon as a night ends. Eliminated players become ghosts on their phones.
+Nobody dies yet. When the night ends, the Seer gets their result and any Bard, Scapegoat or Symbiote effect starts. Attacks land at dawn, after the vote.
 
 ### 3. Town Hall
-1. **Gather and discuss.** Every phone shows a call to gather. The **Town Hall** tab gives the GM a script describing what happened in the night. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only. The village then discusses.
+1. **Gather and discuss.** Every phone shows a call to gather. The **Town Hall** tab gives the GM a script to open the meeting. Lines in quotes are read aloud. Lines in `[brackets]` are notes for the GM only. The village then discusses.
 2. **Vote.** The GM taps **Open the Floor to Voting**. Each player selects a player on their own phone and taps **Confirm Vote**. A ghost has one final vote: at each Town Hall they either use it or tap **Save My Vote for Later**, and voting waits for that choice. A confirmed vote can't be changed. The GM sees who has voted, but not for whom. If someone can't vote, the GM can tap **Close Voting & Reveal**.
 3. **Reveal.** Once all votes are in, each phone becomes a full-screen landscape blackboard showing only the name its player voted for. The GM calls each name in turn and that player holds up their phone. The GM's phone shows every vote and the tally, with Bard and Scapegoat effects already applied.
-4. **Move on.** The GM eliminates whoever leads the vote, or runs a tiebreak vote between the tied players if it's a tie, then taps **Move On — Start Night** to begin the next round. Every night is followed by a Town Hall.
+4. **Move on.** The GM eliminates whoever leads the vote and reveals their role, or runs a tiebreak vote between the tied players if it's a tie, then taps **Move On — Go to Dawn**.
+5. **Dawn.** The night's attacks land and the GM reads out what happened from the script. An attack on someone who has just been voted out is wasted. Choices made before the vote still count even if the player who made them was voted out, so a banished wolf's kill still lands. Anyone who dies becomes a ghost on their phone. The GM then taps **Start Night** to begin the next round.
 
 ### Winning
 - **Villagers** win when every Werewolf is dead.
 - **Werewolves** win when they equal or outnumber everyone else still alive.
 - **The Jester** wins on their own if the village votes them out at Town Hall.
 
-The app checks for a win after every night and every elimination, and ends the game automatically.
+The app checks for a win after every vote and every dawn, and ends the game automatically. Werewolves can only win at dawn, once the night's attacks have landed.
 
 ## Roles
 
@@ -46,7 +47,7 @@ Each player's card gives their role one short line. The full rules are here, for
 |---|---|---|
 | 🐺 Werewolf | Wolves | Each night, **every werewolf makes their own kill**. Wolves can split up to kill several players, or team up on one target to get past a Doctor, a healing potion or a Tank. Werewolves can see their pack and can't target anyone in it. A kill redirected onto a Werewolf has no effect. |
 | 🏡 Villager | Village | No ability. Use your wits at Town Hall. |
-| 🔮 Seer | Village | Each night, inspect a player. When the night ends, your phone shows whether they are a Werewolf. |
+| 🔮 Seer | Village | Each night, inspect a player. When the night ends, before the vote, your phone shows whether they are a Werewolf. |
 | ⚕️ Doctor | Village | Each night, protect a player (yourself included). The protection cancels **one** attack on them, either a wolf kill or poison. Two wolves on the same target still get through. |
 | 🧙 Witch | Village | One Healing Potion (cancels one wolf attack on a player) and one Poison Potion (kills anyone). Each can be used once, and only one per night. |
 | 🎯 Hunter | Village | Once per game, shoot a player at night. Nothing can stop the silver bullet. |
@@ -62,11 +63,11 @@ Each player's card gives their role one short line. The full rules are here, for
 
 ### Night resolution order
 
-When the night ends, actions are applied in this order:
+Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vote, and everything else happens when the night ends:
 
 1. **Seductress.** Actions from distracted players have no effect, and a distracted Witch keeps her potion.
 2. **Puppetmaster.** Controlled players' actions are redirected to the new target.
-3. **Symbiote.** The bond is formed. It takes effect immediately, so it counts for deaths that same night.
+3. **Symbiote.** The bond is formed. It takes effect immediately, so it counts for that round's vote and attacks.
 4. **Doctor and the Witch's healing potion.**
 5. **Seer.**
 6. **Attacks.** Each werewolf's kill (unless it now points at a Werewolf), then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
