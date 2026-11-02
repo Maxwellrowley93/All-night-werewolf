@@ -271,7 +271,7 @@ function actRandomly(seat) {
 }
 
 function fillWaiting() {
-  seats.filter(s => visibleCards(s).length).forEach(actRandomly);
+  seats.filter(s => s.id !== 'gm' && visibleCards(s).length).forEach(actRandomly);
 }
 
 // Keeps each window's label in step with what that window is showing
