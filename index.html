@@ -1795,7 +1795,7 @@ function renderPlayer(game) {
     seerArea.style.display = 'block';
     document.getElementById('playerSeerResultContent').innerHTML = visions.map(r => {
       const isWolf = r.alignment === 'wolf';
-      return `<div class="info-box ${isWolf ? 'warning' : 'success'}">Night ${r.round}: <strong>${esc(r.targetName)}</strong> is ${isWolf ? '🐺 a <strong>Werewolf</strong>' : '✅ <strong>not a Werewolf</strong>'}.</div>`;
+      return `<div class="info-box ${isWolf ? 'warning' : 'success'}">Night ${esc(r.round)}: <strong>${esc(r.targetName)}</strong> is ${isWolf ? '🐺 a <strong>Werewolf</strong>' : '✅ <strong>not a Werewolf</strong>'}.</div>`;
     }).join('');
   } else {
     seerArea.style.display = 'none';
@@ -1840,7 +1840,7 @@ function renderPhaseBar(game) {
     bar.innerHTML = '<div class="phase-step current">Game Over</div>';
     return;
   }
-  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Banish', dawn: 'Dawn' };
+  const labels = { night: `Night ${esc(game.round)}`, discussion: 'Gather', voting: 'Vote', reveal: 'Banish', dawn: 'Dawn' };
   const current = PHASE_STEPS.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
   bar.innerHTML = PHASE_STEPS.map((step, i) =>
     `<div class="phase-step${i === current ? ' current' : i < current ? ' done' : ''}">${labels[step]}</div>`
@@ -2382,7 +2382,7 @@ function renderGmPlayerList(game) {
   const container = document.getElementById('gm-player-list');
   const players = getPlayerList(game);
   if (!players.length) {
-    container.innerHTML = `<p class="text-mist text-small">No players yet. Share the room code!</p><div class="room-code">${state.roomCode}</div>`;
+    container.innerHTML = `<p class="text-mist text-small">No players yet. Share the room code!</p><div class="room-code">${esc(state.roomCode)}</div>`;
     return;
   }
 
@@ -2398,7 +2398,7 @@ function renderGmPlayerList(game) {
         ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
       </div>
       ${canEliminate && !isGhost
-        ? `<button class="gm-x" aria-label="Eliminate ${esc(p.name)}" onclick="eliminatePlayer('${p.id}')">✕</button>`
+        ? `<button class="gm-x" aria-label="Eliminate ${esc(p.name)}" data-id="${esc(p.id)}" onclick="eliminatePlayer(this.dataset.id)">✕</button>`
         : ''}
     </div>`;
   });
@@ -2495,7 +2495,7 @@ function townHallNextButton(game) {
   if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openVoting()">Open the Floor to Voting 🗳️</button>`;
   if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
   if (stage === 'reveal') return `<button class="btn btn-gold mt-8" onclick="advanceToDawn()">Move On — Go to Dawn 🌅</button>`;
-  return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${game.round + 1} 🌙</button>`;
+  return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${esc(game.round + 1)} 🌙</button>`;
 }
 
 function renderGmVoting(game) {
@@ -2576,7 +2576,7 @@ function renderGmVoting(game) {
       const target = leaders[0];
       ctrlHtml += `
         <div class="info-box warning">☠️ <strong>${esc(target.name)}</strong> leads with ${top} vote(s).</div>
-        <button class="btn btn-danger" onclick="eliminatePlayerVote('${target.id}')">Eliminate ${esc(target.name)}</button>
+        <button class="btn btn-danger" data-id="${esc(target.id)}" onclick="eliminatePlayerVote(this.dataset.id)">Eliminate ${esc(target.name)}</button>
       `;
     } else if (leaders.length > 1) {
       ctrlHtml += `
