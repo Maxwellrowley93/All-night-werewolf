@@ -28,7 +28,9 @@
     font-family: 'Crimson Pro', Georgia, serif;
     background: var(--shadow);
     color: var(--pale);
+    /* On Android, vh is the height with the address bar hidden, so it can be taller than the screen */
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
     position: relative;
   }
@@ -676,7 +678,7 @@
     flex: 1;
     padding-top: 13px;
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--mist);
   }
   .phase-step::before {
@@ -1499,7 +1501,7 @@ function fitScreen() {
     // Keeps the page clear of the Leave game button pinned to the bottom of the screen
     app.style.paddingBottom = app.classList.contains('in-game') ? `${LEAVE_BTN_SPACE * widthScale / value}px` : '';
   };
-  const fits = () => page.scrollHeight <= window.innerHeight;
+  const fits = () => pageFits();
 
   let zoom = widthScale;
   setZoom(zoom);
@@ -1519,6 +1521,15 @@ function fitScreen() {
   setZoom(low);
 }
 
+// Whether the game's own content fits on screen. The document can be taller than the content:
+// on Android, vh units measure the screen with the address bar hidden, so 100vh is taller than what's visible.
+function contentBottom() {
+  return document.getElementById('app').getBoundingClientRect().bottom + window.scrollY;
+}
+function pageFits() {
+  return contentBottom() <= window.innerHeight + 1;
+}
+
 // The GM's screens usually have room to spare, so their text grows to fill the phone:
 // the largest size where nothing needs scrolling and no more names or roles get cut short
 const GM_MAX_SCALE = 1.6;
@@ -1535,7 +1546,7 @@ function growGmScreen() {
     const cutAtNormalSize = cutShort();
     for (let scale = GM_MAX_SCALE; scale > 1; scale -= 0.05) {
       setScale(scale);
-      if (page.scrollHeight <= window.innerHeight && page.scrollWidth <= window.innerWidth && cutShort() <= cutAtNormalSize) return scale;
+      if (pageFits() && page.scrollWidth <= window.innerWidth && cutShort() <= cutAtNormalSize) return scale;
     }
     return 1;
   };
@@ -1551,7 +1562,7 @@ function growGmScreen() {
     list.classList.toggle('one-column', oneColumn);
     const scale = largestScale();
     setScale(scale);
-    return { oneColumn, scale, height: page.scrollHeight };
+    return { oneColumn, scale, height: contentBottom() };
   };
   const one = tryLayout(true);
   const two = tryLayout(false);
