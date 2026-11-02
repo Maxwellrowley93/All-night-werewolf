@@ -994,7 +994,16 @@
   #app.in-game .count-btn { width: 30px; height: 26px; }
   #app.in-game .count-val { font-size: 15px; min-width: 22px; }
 
-  #app.in-game #leave-btn { margin-top: 2px; padding: 4px 10px; font-size: 9px; }
+  #leave-btn {
+    position: fixed;
+    bottom: calc(4px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    width: auto;
+    padding: 4px 10px;
+    font-size: 9px;
+  }
 
   /* Test windows: many copies run at once, so skip the decoration */
   html.test-seat *, html.test-seat *::before { animation: none !important; }
@@ -1163,9 +1172,10 @@
     </div>
   </div>
 
-  <button class="btn btn-secondary btn-sm mt-16" id="leave-btn" style="display:none" onclick="leaveGame()">Leave game</button>
-
 </div>
+
+<!-- Outside #app so that fitting the page to the screen doesn't move or shrink it -->
+<button class="btn btn-secondary btn-sm" id="leave-btn" style="display:none" onclick="leaveGame()">Leave game</button>
 
 <div class="toast" id="toast"></div>
 
@@ -1415,15 +1425,21 @@ function showScreen(id) {
 
 // Shrinks the page until it fits the screen, so nobody has to scroll to find a name or a button
 const MIN_FIT = 0.55;
+const LEAVE_BTN_SPACE = 32;
 function fitScreen() {
   // The on-screen keyboard shrinks the window while typing a name, and that shouldn't shrink the page
   if (document.activeElement?.tagName === 'INPUT') return;
   const app = document.getElementById('app');
+  // Keeps the page clear of the Leave game button pinned to the bottom of the screen
+  const setZoom = value => {
+    app.style.zoom = value;
+    app.style.paddingBottom = app.classList.contains('in-game') ? `${LEAVE_BTN_SPACE / value}px` : '';
+  };
   let zoom = 1;
-  app.style.zoom = zoom;
+  setZoom(zoom);
   while (document.documentElement.scrollHeight > window.innerHeight && zoom > MIN_FIT) {
     zoom -= 0.03;
-    app.style.zoom = zoom;
+    setZoom(zoom);
   }
 }
 window.addEventListener('resize', fitScreen);
@@ -1824,7 +1840,7 @@ function renderPhaseBar(game) {
     bar.innerHTML = '<div class="phase-step current">Game Over</div>';
     return;
   }
-  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Reveal', dawn: 'Dawn' };
+  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Banish', dawn: 'Dawn' };
   const current = PHASE_STEPS.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
   bar.innerHTML = PHASE_STEPS.map((step, i) =>
     `<div class="phase-step${i === current ? ' current' : i < current ? ' done' : ''}">${labels[step]}</div>`
@@ -2349,7 +2365,7 @@ function renderGm(game) {
 const TOWN_HALL_BANNER = {
   discussion: '🕯️ Town Hall — gather & discuss',
   voting: '🗳️ Town Hall — voting',
-  reveal: '🪧 Town Hall — the reveal',
+  reveal: '🪧 Town Hall — banish',
   dawn: '🌅 Dawn'
 };
 
