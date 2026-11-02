@@ -895,6 +895,14 @@
   #screen-gm.gm-lobby .gm-panel { display: none; }
   #screen-gm.gm-lobby #panel-setup { display: block; }
 
+  /* GM: a single player's panel replaces the tabs until Back is tapped */
+  #screen-gm.gm-player-open .gm-tabs,
+  #screen-gm.gm-player-open .gm-panel { display: none; }
+  #screen-gm.gm-player-open #panel-player { display: block; }
+  .gm-player-cell .cell-text.tappable { cursor: pointer; }
+  .gm-resume { margin-top: 4px; }
+  .gm-resume summary { cursor: pointer; text-align: center; font-size: 13px; color: var(--mist); }
+
   .symbiote-warning {
     background: rgba(40,80,40,0.2);
     border: 1px solid rgba(60,110,60,0.4);
@@ -1092,6 +1100,13 @@
         <button class="btn btn-primary" onclick="joinGame()">Join Game</button>
         <div class="separator">— or —</div>
         <button class="btn btn-secondary" onclick="createGame()">Create New Game (Game Master)</button>
+        <details class="gm-resume">
+          <summary>Game Master's phone died? Take over here</summary>
+          <div class="label mt-8">GM Code</div>
+          <input type="text" id="gmCodeInput" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off">
+          <p class="text-mist text-small mt-8">Enter the room code above too. The GM code is shown on the Game Master's screen.</p>
+          <button class="btn btn-secondary mt-8" onclick="resumeAsGm()">Resume as Game Master</button>
+        </details>
       </div>
     </div>
   </div>
@@ -1212,12 +1227,24 @@
       </div>
     </div>
 
+    <!-- GM: one player's choices, entered or fixed by the GM -->
+    <div class="gm-panel" id="panel-player">
+      <div class="card">
+        <div class="flex-between">
+          <h2 id="gm-pp-title"></h2>
+          <button class="btn btn-secondary btn-sm" onclick="closePlayerPanel()">Back</button>
+        </div>
+        <div id="gm-pp-body" class="mt-8"></div>
+      </div>
+    </div>
+
     <!-- GM: Lobby (room code + role setup, shown until roles are dealt) -->
     <div class="gm-panel" id="panel-setup">
       <div class="card text-center">
         <div class="label">Room Code</div>
         <div class="room-code" id="gm-lobby-code">----</div>
         <p class="text-mist" id="gm-lobby-players">Waiting for players to join…</p>
+        <p class="text-mist text-small mt-8" id="gm-lobby-backup"></p>
       </div>
 
       <div class="card">
@@ -1294,7 +1321,8 @@ async function fbSet(path, data) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    return await r.json();
+    if (!r.ok) throw new Error('save refused');
+    return (await r.json()) ?? true;
   } catch(e) { return null; }
 }
 
@@ -1305,7 +1333,8 @@ async function fbUpdate(path, data) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    return await r.json();
+    if (!r.ok) throw new Error('save refused');
+    return (await r.json()) ?? true;
   } catch(e) { return null; }
 }
 
@@ -1316,8 +1345,18 @@ async function fbPush(path, data) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    return await r.json();
+    if (!r.ok) throw new Error('save refused');
+    return (await r.json()) ?? true;
   } catch(e) { return null; }
+}
+
+// Saves to the current game, or tells whoever is holding the phone that it didn't save,
+// so a choice is never silently lost
+const SAVE_FAILED = "Didn't save. Check your connection and try again.";
+async function saveGame(updates) {
+  const ok = await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!ok) toast(SAVE_FAILED, 4000);
+  return !!ok;
 }
 
 // ============================================================
@@ -1571,6 +1610,8 @@ function growGmScreen() {
   setScale(best.scale);
 }
 window.addEventListener('resize', fitScreen);
+// Opening the GM takeover section on the first screen makes it taller
+document.querySelector('details.gm-resume').addEventListener('toggle', fitScreen);
 document.fonts?.ready.then(fitScreen);
 
 function toast(msg, duration=3000) {
@@ -1745,13 +1786,15 @@ async function restoreSession() {
 
 window.leaveGame = async function() {
   const msg = state.isGM
-    ? 'Leave this game? You will no longer be able to run it from this device.'
+    ? `Leave this game? You can take it back over from any phone with room code ${state.roomCode} and GM code ${gmCode(state.gameData)}.`
     : 'Leave this game? You can rejoin later with the same name and room code.';
   if (!await askConfirm(msg)) return;
   clearInterval(state.pollInterval);
   clearSession();
   Object.assign(state, { roomCode: null, playerId: null, playerName: null, isGM: false, gameData: null, pollInterval: null, lastHash: null, phaseKey: null });
   pendingAction = { type: null };
+  gmPlayerId = null;
+  document.getElementById('screen-gm').classList.remove('gm-player-open');
   document.getElementById('leave-btn').style.display = 'none';
   showScreen('landing');
 };
@@ -1991,8 +2034,6 @@ const OPTIONAL_ACTION_ROLES = ['hunter', 'bard', 'scapegoat', 'symbiote', 'witch
 
 function renderPlayerAction(game, me) {
   const content = document.getElementById('playerActionContent');
-  const others = getLivingPlayers(game).filter(p => p.id !== state.playerId);
-  const self = { id: state.playerId, name: me.name, label: 'Myself' };
 
   if (!ROLES[me.role]?.hasAction) {
     content.innerHTML = `<p class="text-mist text-small">No action tonight.</p>`;
@@ -2006,11 +2047,18 @@ function renderPlayerAction(game, me) {
     content.innerHTML = `<div class="submitted-banner">${SPENT_TEXT[me.role]}</div>`;
     return;
   }
+  content.innerHTML = buildActionChoices(game, { ...me, id: state.playerId });
+}
 
+// The targets and buttons for one player's night action. The GM uses this too, to act for a player.
+function buildActionChoices(game, actor) {
+  const selfLabel = actor.id === state.playerId ? 'Myself' : 'Themselves';
+  const others = getLivingPlayers(game).filter(p => p.id !== actor.id);
+  const self = { id: actor.id, name: actor.name, label: selfLabel };
   const prompt = text => `<p class="text-mist text-small" style="margin-bottom:8px">${text}</p>`;
   let html = '';
 
-  switch (me.role) {
+  switch (actor.role) {
     case 'werewolf':
       // Everyone listed in the pack is off limits, so a Hairy Villager can't be told apart by being targetable
       html = prompt('Choose your victim') +
@@ -2023,7 +2071,7 @@ function renderPlayerAction(game, me) {
       html = prompt('Protect') + buildTargetGrid([...others, self], 'protect');
       break;
     case 'witch':
-      html = buildWitchUI(me, others, self);
+      html = buildWitchUI(actor, others, self);
       break;
     case 'hunter':
       html = prompt('Shoot') + buildTargetGrid(others, 'shoot');
@@ -2032,7 +2080,7 @@ function renderPlayerAction(game, me) {
       html = prompt('Block') + buildTargetGrid(others, 'distract');
       break;
     case 'puppetmaster': {
-      const everyone = getLivingPlayers(game).map(p => p.id === state.playerId ? { ...p, label: 'Myself' } : p);
+      const everyone = getLivingPlayers(game).map(p => p.id === actor.id ? { ...p, label: selfLabel } : p);
       html = prompt('Control') + buildTargetGrid(others, 'control', { button: false })
         + `<div class="mt-16">${prompt('New target')}</div>`
         + buildTargetGrid(everyone, 'control', { slot: 'redirect' });
@@ -2049,11 +2097,10 @@ function renderPlayerAction(game, me) {
       break;
   }
 
-  if (OPTIONAL_ACTION_ROLES.includes(me.role)) {
+  if (OPTIONAL_ACTION_ROLES.includes(actor.role)) {
     html += `<button class="btn btn-secondary" onclick="skipAction()">Not tonight</button>`;
   }
-
-  content.innerHTML = html;
+  return html;
 }
 
 // pendingAction holds the player's current (unconfirmed) selection.
@@ -2118,15 +2165,35 @@ window.selectTarget = function(el) {
   document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
 };
 
+// The player whose choice is being made: the GM's chosen player while they act for someone, otherwise this phone's player
+function actorId() {
+  return gmPlayerId || state.playerId;
+}
+
+// After a choice is saved: the GM stays on that player's panel, a player's card turns face down
+function afterChoiceSaved(message) {
+  pendingAction = { type: null };
+  if (gmPlayerId) {
+    toast(`${message} for ${state.gameData.players[gmPlayerId]?.name}`);
+  } else {
+    hideRoleCard();
+    fitScreen();
+    toast(message);
+  }
+  pollGame();
+}
+
 window.confirmAction = async function() {
   const a = pendingAction;
   if (!canConfirm(a.type)) return;
   document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
 
+  const id = actorId();
+  const player = state.gameData.players[id];
   const action = {
-    fromId: state.playerId,
-    fromName: state.playerName,
-    role: state.gameData.players[state.playerId]?.role,
+    fromId: id,
+    fromName: player?.name,
+    role: player?.role,
     type: a.type,
     targetId: a.targetId,
     targetName: a.targetName,
@@ -2138,22 +2205,18 @@ window.confirmAction = async function() {
     action.redirectName = a.redirectName;
   }
 
-  await fbPush(`games/${state.roomCode}/actions`, action);
-  await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
-  pendingAction = { type: null };
-  hideRoleCard();
-  fitScreen();
-  toast('Saved');
-  pollGame();
+  // The action and the "done" mark save together, so neither can be saved without the other
+  const key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  if (!await saveGame({ [`actions/${key}`]: action, [`players/${id}/actionSubmitted`]: true })) {
+    document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
+    return;
+  }
+  afterChoiceSaved('Saved');
 };
 
 window.skipAction = async function() {
-  await fbUpdate(`games/${state.roomCode}/players/${state.playerId}`, { actionSubmitted: true });
-  pendingAction = { type: null };
-  hideRoleCard();
-  fitScreen();
-  toast('Saved');
-  pollGame();
+  if (!await saveGame({ [`players/${actorId()}/actionSubmitted`]: true })) return;
+  afterChoiceSaved('Saved');
 };
 
 function renderTownHallArea(game, me) {
@@ -2197,14 +2260,22 @@ function renderTownHallArea(game, me) {
     return;
   }
 
+  area.innerHTML = buildVoteChoices(game, { ...me, id: state.playerId });
+}
+
+// The names and buttons for one player's vote. The GM uses this too, to vote for a player.
+function buildVoteChoices(game, voter) {
+  const forGm = voter.id !== state.playerId;
   const candidates = getLivingPlayers(game)
-    .filter(p => p.id !== state.playerId && (!game.tiebreak || game.tiebreak.includes(p.id)));
-  const question = (game.tiebreak ? 'Tiebreak! Who should the village eliminate?' : 'Who should the village eliminate?') +
-    (me.eliminated ? ' This is your one final vote, so you can save it for a later Town Hall.' : '');
-  area.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">${question}</p>` +
+    .filter(p => p.id !== voter.id && (!game.tiebreak || game.tiebreak.includes(p.id)));
+  const question = forGm
+    ? `${game.tiebreak ? 'Tiebreak! ' : ''}Who does ${esc(voter.name)} vote for?${voter.eliminated ? ' This is their one final vote.' : ''}`
+    : (game.tiebreak ? 'Tiebreak! Who should the village eliminate?' : 'Who should the village eliminate?') +
+      (voter.eliminated ? ' This is your one final vote, so you can save it for a later Town Hall.' : '');
+  return `<p class="text-mist text-small" style="margin-bottom:8px">${question}</p>` +
     buildTargetGrid(candidates, 'vote', { button: false }) +
-    `<button class="btn ${me.eliminated ? 'btn-ghost-blue' : 'btn-primary'} mt-16 confirm-action-btn" data-type="vote" onclick="submitVote()"${canConfirm('vote') ? '' : ' disabled'}>Confirm Vote</button>` +
-    (me.eliminated && !me.ghostVoteRound ? `<button class="btn btn-secondary mt-8" onclick="saveGhostVote()">Save My Vote for Later</button>` : '');
+    `<button class="btn ${voter.eliminated ? 'btn-ghost-blue' : 'btn-primary'} mt-16 confirm-action-btn" data-type="vote" onclick="submitVote()"${canConfirm('vote') ? '' : ' disabled'}>Confirm Vote</button>` +
+    (voter.eliminated && !voter.ghostVoteRound ? `<button class="btn btn-secondary mt-8" onclick="saveGhostVote()">${forGm ? 'Save Their Vote for Later' : 'Save My Vote for Later'}</button>` : '');
 }
 
 // The blackboard covers the whole screen and shows only the name, so nothing else can be seen when it's held up
@@ -2233,23 +2304,27 @@ function chalkSlate(voterName, vote) {
 }
 
 window.saveGhostVote = async function() {
-  await fbUpdate(`games/${state.roomCode}/votes`, { [state.playerId]: { saved: true } });
+  if (!await saveGame({ [`votes/${actorId()}`]: { saved: true } })) return;
   pendingAction = { type: null };
-  toast('Vote saved for later');
+  toast(gmPlayerId ? `Vote saved for later for ${state.gameData.players[gmPlayerId]?.name}` : 'Vote saved for later');
   pollGame();
 };
 
 window.submitVote = async function() {
   if (!canConfirm('vote')) { toast('Select a player'); return; }
   const { targetId, targetName } = pendingAction;
+  const id = actorId();
   document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
-  const updates = { [`votes/${state.playerId}`]: { targetId, targetName } };
-  if (state.gameData.players[state.playerId]?.eliminated) {
-    updates[`players/${state.playerId}/ghostVoteRound`] = state.gameData.round;
+  const updates = { [`votes/${id}`]: { targetId, targetName } };
+  if (state.gameData.players[id]?.eliminated) {
+    updates[`players/${id}/ghostVoteRound`] = state.gameData.round;
   }
-  await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!await saveGame(updates)) {
+    document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
+    return;
+  }
   pendingAction = { type: null };
-  toast('Vote locked in');
+  toast(gmPlayerId ? `Vote saved for ${state.gameData.players[gmPlayerId]?.name}` : 'Vote locked in');
   pollGame();
 };
 
@@ -2485,10 +2560,13 @@ function renderGm(game) {
   if (game.phase === 'ended' && WIN_BANNER[game.winner]) {
     document.getElementById('gm-phase-banner').textContent = WIN_BANNER[game.winner];
   }
+  document.getElementById('gm-lobby-backup').textContent =
+    `GM code: ${gmCode(game)}. Note it down: if this phone dies, use it with the room code to carry on from another phone.`;
   renderGmPlayerList(game);
   renderGmPhaseControls(game);
   renderGmActionInbox(game);
   renderGmVoting(game);
+  if (gmPlayerId) renderPlayerPanel(game);
   updateRoleTotal();
   document.getElementById('assign-roles-btn').disabled = game.phase !== 'lobby';
 }
@@ -2519,12 +2597,13 @@ function renderGmPlayerList(game) {
 
   const bond = game.symbiote;
   const canEliminate = game.phase === 'night' || game.phase === 'townhall';
-  let html = '<div class="compact-grid">';
+  let html = canEliminate ? '<p class="text-mist text-small" style="margin-bottom:4px">Tap a player to enter their choice or fix a mistake.</p>' : '';
+  html += '<div class="compact-grid">';
   players.forEach(p => {
     const isGhost = p.eliminated;
     const bonded = bond && (p.id === bond.aId || p.id === bond.bId);
     html += `<div class="gm-player-cell ${isGhost ? 'ghost-card' : ''}">
-      <div class="cell-text">
+      <div class="cell-text${canEliminate ? ' tappable' : ''}"${canEliminate ? ` data-id="${esc(p.id)}" onclick="openPlayerPanel(this.dataset.id)"` : ''}>
         <span class="player-name">${esc(p.name)}${isGhost?' 👻':''}${p.wounded?' 🩹':''}${bonded?' 🔗':''}</span>
         ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
       </div>
@@ -2557,6 +2636,9 @@ function renderGmPhaseControls(game) {
     `;
   } else if (game.phase === 'ended') {
     html = `<p class="text-mist text-small">The game is over. Tap "Leave game" below to start a new one.</p>`;
+  }
+  if (game.phase === 'night' || game.phase === 'townhall') {
+    html += `<p class="text-mist text-small mt-8">If this phone dies, carry on from another one with room code <strong>${esc(state.roomCode)}</strong> and GM code <strong>${esc(gmCode(game))}</strong>.</p>`;
   }
   container.innerHTML = html;
 }
@@ -2723,7 +2805,7 @@ function renderGmVoting(game) {
 // ============================================================
 
 window.openVoting = async function() {
-  await fbUpdate(`games/${state.roomCode}`, { townHallStage: 'voting', votes: null, tiebreak: null });
+  if (!await saveGame({ townHallStage: 'voting', votes: null, tiebreak: null })) return;
   toast('The floor is open 🗳️');
   pollGame();
 };
@@ -2733,18 +2815,18 @@ window.closeVoting = async function() {
   if (!game) return;
   const missing = getVoters(game).filter(p => !game.votes?.[p.id]);
   if (missing.length && !await askConfirm(`Still waiting on: ${missing.map(p => p.name).join(', ')}.\n\nClose voting anyway?`)) return;
-  await fbUpdate(`games/${state.roomCode}`, { townHallStage: 'reveal' });
+  if (!await saveGame({ townHallStage: 'reveal' })) return;
   pollGame();
 };
 
 window.startTiebreak = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game) return;
-  await fbUpdate(`games/${state.roomCode}`, {
+  if (!await saveGame({
     townHallStage: 'voting',
     votes: null,
     tiebreak: tallyVotes(game).leaders.map(p => p.id)
-  });
+  })) return;
   toast('Tiebreak vote open');
   pollGame();
 };
@@ -2758,12 +2840,12 @@ async function endGameIfWon() {
   if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner });
 }
 
-async function eliminate(playerId) {
+async function eliminate(playerId, extraUpdates = {}) {
   const game = await fbGet(`games/${state.roomCode}`);
   const player = game?.players?.[playerId];
   if (!player || player.eliminated) return;
 
-  const updates = { [`players/${playerId}/eliminated`]: true };
+  const updates = { ...extraUpdates, [`players/${playerId}/eliminated`]: true };
 
   // Symbiote — the bonded partner dies too
   let partnerName = null;
@@ -2777,7 +2859,7 @@ async function eliminate(playerId) {
     }
   }
 
-  await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!await saveGame(updates)) return;
   toast(`${player.name} eliminated${partnerName ? ` — and ${partnerName}, through the Symbiote bond` : ''}`, 4000);
   await endGameIfWon();
   pollGame();
@@ -2794,15 +2876,12 @@ window.eliminatePlayerVote = async function(playerId) {
   const player = game?.players?.[playerId];
   if (!player || !await askConfirm(`Eliminate ${player.name} by village vote?`)) return;
 
-  await fbUpdate(`games/${state.roomCode}`, { votedOut: player.name });
-
   // The Jester wins by being voted out
   if (player.role === 'jester') {
-    await fbUpdate(`games/${state.roomCode}`, { [`players/${playerId}/eliminated`]: true, phase: 'ended', winner: 'jester' });
-    pollGame();
+    if (await saveGame({ votedOut: player.name, [`players/${playerId}/eliminated`]: true, phase: 'ended', winner: 'jester' })) pollGame();
     return;
   }
-  await eliminate(playerId);
+  await eliminate(playerId, { votedOut: player.name });
 };
 
 async function confirmPending(game) {
@@ -2830,7 +2909,7 @@ window.advanceToTownHall = async function() {
   updates.tiebreak = null;
   updates.votedOut = null;
 
-  await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!await saveGame(updates)) return;
   toast('Everyone has been called to Town Hall 🔔');
   switchGmTab('vote');
   pollGame();
@@ -2862,13 +2941,13 @@ window.advanceToDawn = async function() {
   if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been eliminated.\n\nMove on anyway?`)) return;
 
   const { dawnUpdates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
-  await fbUpdate(`games/${state.roomCode}`, {
+  if (!await saveGame({
     ...dawnUpdates,
     townHallStage: 'dawn',
     votes: null,
     tiebreak: null,
     gmScript: ['"Night falls, and the village sleeps. Morning brings the news."', '', ...report].join('\n')
-  });
+  })) return;
   toast('Attacks have landed 🌅');
   await endGameIfWon();
   pollGame();
@@ -2888,7 +2967,7 @@ window.advanceToNight = async function() {
     gmScript: null
   });
 
-  await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!await saveGame(updates)) return;
   toast('Night phase started 🌙');
   switchGmTab('players');
   pollGame();
@@ -2896,8 +2975,127 @@ window.advanceToNight = async function() {
 
 window.endGame = async function() {
   if (!await askConfirm('End the game?')) return;
-  await fbUpdate(`games/${state.roomCode}`, { phase: 'ended' });
+  if (!await saveGame({ phase: 'ended' })) return;
   pollGame();
+};
+
+// ============================================================
+// GM BACKUP — enter or fix a player's choices for them
+// ============================================================
+// If a phone dies or someone taps the wrong name, the GM taps that player to enter their
+// night action or vote, clear one so it can be redone, or bring back a player eliminated by mistake.
+
+let gmPlayerId = null;
+
+window.openPlayerPanel = function(playerId) {
+  gmPlayerId = playerId;
+  pendingAction = { type: null };
+  document.getElementById('screen-gm').classList.add('gm-player-open');
+  renderPlayerPanel(state.gameData);
+  fitScreen();
+};
+
+window.closePlayerPanel = function() {
+  gmPlayerId = null;
+  pendingAction = { type: null };
+  document.getElementById('screen-gm').classList.remove('gm-player-open');
+  fitScreen();
+};
+
+function renderPlayerPanel(game) {
+  const p = game.players?.[gmPlayerId];
+  if (!p || (game.phase !== 'night' && game.phase !== 'townhall')) {
+    closePlayerPanel();
+    return;
+  }
+  const player = { ...p, id: gmPlayerId };
+  const role = ROLES[p.role];
+  document.getElementById('gm-pp-title').textContent = `${role?.emoji || ''} ${p.name}`;
+  const sections = [`<div class="info-box">${esc(role?.name || p.role)} (${esc(TEAMS[role?.team]?.reveal || '')})${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
+
+  if (game.phase === 'night' && !p.eliminated) sections.push(gmActionSection(game, player));
+  if (game.phase === 'townhall' && townHallStage(game) === 'voting' && canVote(p, game)) sections.push(gmVoteSection(game, player));
+  if (p.eliminated) {
+    sections.push(`<button class="btn btn-secondary mt-8" onclick="revivePlayer()">Bring ${esc(p.name)} Back (Undo Elimination)</button>`);
+  }
+  if (sections.length === 1) sections.push(`<p class="text-mist text-small">Nothing to enter for ${esc(p.name)} right now.</p>`);
+  document.getElementById('gm-pp-body').innerHTML = sections.join('');
+}
+
+function gmActionSection(game, player) {
+  const name = esc(player.name);
+  if (!ROLES[player.role]?.hasAction) return `<p class="text-mist text-small">${name} has no night action.</p>`;
+  if (player.actionSubmitted) {
+    const chosen = getRoundActions(game).filter(a => a.fromId === player.id).map(a => esc(actionDescription(a)));
+    return `<div class="submitted-banner">✓ ${name} is done for tonight: ${chosen.length ? chosen.join('; ') : 'chose not to act'}.</div>
+      <button class="btn btn-secondary mt-8" onclick="clearPlayerAction()">Clear So It Can Be Redone</button>`;
+  }
+  if (abilitySpent(player, game)) return `<div class="submitted-banner">${name}'s ability is used up.</div>`;
+  return `<p class="text-mist text-small" style="margin-bottom:8px">Enter ${name}'s action:</p>` + buildActionChoices(game, player);
+}
+
+// The GM sees whether a player has voted, but not who for
+function gmVoteSection(game, player) {
+  const name = esc(player.name);
+  const vote = game.votes?.[player.id];
+  if (!vote) return buildVoteChoices(game, player);
+  return `<div class="submitted-banner">${vote.saved ? `👻 ${name} saved their final vote.` : `🔒 ${name} has voted.`}</div>
+    <button class="btn btn-secondary mt-8" onclick="clearPlayerVote()">Clear So They Can Vote Again</button>`;
+}
+
+window.clearPlayerAction = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  const player = game?.players?.[gmPlayerId];
+  if (!player || game.phase !== 'night') return;
+  const updates = { [`players/${gmPlayerId}/actionSubmitted`]: false };
+  Object.entries(game.actions || {}).forEach(([key, a]) => {
+    if (a.fromId === gmPlayerId && a.round === game.round) updates[`actions/${key}`] = null;
+  });
+  if (!await saveGame(updates)) return;
+  toast(`Cleared. ${player.name} can choose again.`);
+  pollGame();
+};
+
+window.clearPlayerVote = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  const player = game?.players?.[gmPlayerId];
+  if (!player || game.phase !== 'townhall' || townHallStage(game) !== 'voting') return;
+  const updates = { [`votes/${gmPlayerId}`]: null };
+  // A ghost who used their final vote at this Town Hall gets it back
+  if (player.ghostVoteRound === game.round) updates[`players/${gmPlayerId}/ghostVoteRound`] = null;
+  if (!await saveGame(updates)) return;
+  toast(`Cleared. ${player.name} can vote again.`);
+  pollGame();
+};
+
+window.revivePlayer = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  const player = game?.players?.[gmPlayerId];
+  if (!player?.eliminated || !await askConfirm(`Bring ${player.name} back into the game? Only do this to undo a mistake.`)) return;
+  const updates = { [`players/${gmPlayerId}/eliminated`]: false };
+  if (game.votedOut === player.name) updates.votedOut = null;
+  if (!await saveGame(updates)) return;
+  toast(`${player.name} is back in the game`);
+  pollGame();
+};
+
+// A GM whose phone dies can take the game over on another phone with this code.
+// It comes from the time the game was created, so it needs nothing extra in the database.
+function gmCode(game) {
+  return String(game?.createdAt || '').slice(-4);
+}
+
+window.resumeAsGm = async function() {
+  const code = document.getElementById('joinCode').value.trim().toUpperCase();
+  const entered = document.getElementById('gmCodeInput').value.trim();
+  if (code.length !== 4) { toast('Enter the 4-letter room code above'); return; }
+  const game = await fbGet(`games/${code}`);
+  if (!game) { toast('Room not found. Check the code.'); return; }
+  if (!entered || entered !== gmCode(game)) { toast("That GM code doesn't match this room."); return; }
+  const name = document.getElementById('playerName').value.trim() || 'Game Master';
+  Object.assign(state, { roomCode: code, playerId: 'GM', playerName: name, isGM: true, lastHash: null });
+  enterGame();
+  toast(`You're now running room ${code}`);
 };
 
 function checkWinCondition(players) {
@@ -3007,7 +3205,7 @@ window.assignRolesAndStart = async function() {
     if (pool[i] === 'mayor') updates[`players/${p.id}/mayorRevealed`] = true;
   });
 
-  await fbUpdate(`games/${state.roomCode}`, updates);
+  if (!await saveGame(updates)) return;
   switchGmTab('players');
   toast('Roles assigned! Night begins 🌙');
   pollGame();

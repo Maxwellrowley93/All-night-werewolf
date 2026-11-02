@@ -75,9 +75,16 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 7. **Symbiote deaths.** If one bonded player died, their partner dies too.
 8. **Bard and Scapegoat.** Their effects are stored for the next Town Hall.
 
+## If something goes wrong
+
+- **A phone dies or a player taps the wrong name.** On the **Players** tab, the GM taps that player to open their panel. At night the GM can enter their action, with the same choices their phone shows, or clear one so it can be redone. During voting the GM can enter their vote, save a ghost's final vote, or clear a vote so it can be cast again. The GM sees whether someone has voted, not who for.
+- **The GM eliminates the wrong player.** Tap that player and choose **Bring Back (Undo Elimination)**. This can't undo the end of a game.
+- **The GM's phone dies.** The GM's screen shows a 4-digit **GM code**. On any other phone, open the game, enter the room code, tap **Game Master's phone died? Take over here**, enter the GM code and tap **Resume as Game Master**. The game carries on from where it was.
+- **Something didn't save.** If a phone loses its connection, it says "Didn't save" and keeps the choice on screen, so the player can tap Confirm again. A night action and its "done" mark always save together.
+
 ## Good to know
 
-- **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can only resume on the device that created the game.
+- **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can take over from another phone with the GM code.
 - **No scrolling, full width.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players. On screens wider than a phone, including Android Chrome's **Desktop site** mode, everything scales up to fill the width. The GM's screens also grow their text to fill the phone when there's room, and show the player list one per row or two side by side, whichever allows bigger text.
 - **Leave game**, always at the very bottom of the screen, takes a phone out of the current game.
 - **Roles are not cryptographically secret.** There are no logins, so anyone with a room code can read that game, including every player's role, or change or delete it. `database.rules.json` stops anyone listing every room, wiping them all at once or adding fields the game doesn't use, and it limits the size of each entry. It can't limit how many entries get added. It's built for friends playing in the same room, not for strangers online.
