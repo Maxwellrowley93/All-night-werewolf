@@ -77,7 +77,7 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 ## Good to know
 
 - **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can only resume on the device that created the game.
-- **No scrolling.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players.
+- **No scrolling.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players. The GM's screens also grow their text to fill the phone when there's room, and show the player list one per row or two side by side, whichever allows bigger text.
 - **Leave game**, always at the very bottom of the screen, takes a phone out of the current game.
 - **Roles are not cryptographically secret.** There are no logins, so anyone with a room code can read that game, including every player's role, or change or delete it. `database.rules.json` stops anyone listing every room, wiping them all at once or adding fields the game doesn't use, and it limits the size of each entry. It can't limit how many entries get added. It's built for friends playing in the same room, not for strangers online.
 
