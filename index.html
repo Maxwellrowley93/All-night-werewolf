@@ -1272,7 +1272,7 @@ const ROLES = {
   },
   seer: {
     name: 'Seer', team: 'village', emoji: '🔮',
-    ability: 'Pick a player. At dawn, learn if they\'re a Werewolf.',
+    ability: 'Pick a player. Before the vote, learn if they\'re a Werewolf.',
     hasAction: true, actionType: 'inspect',
     cssClass: 'role-seer'
   },
@@ -1816,7 +1816,7 @@ function renderPlayer(game) {
   if (game.phase === 'night') renderPlayerAction(game, me);
 }
 
-const PHASE_STEPS = ['night', 'discussion', 'voting', 'reveal'];
+const PHASE_STEPS = ['night', 'discussion', 'voting', 'reveal', 'dawn'];
 
 function renderPhaseBar(game) {
   const bar = document.getElementById('player-phase-bar');
@@ -1824,7 +1824,7 @@ function renderPhaseBar(game) {
     bar.innerHTML = '<div class="phase-step current">Game Over</div>';
     return;
   }
-  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Reveal' };
+  const labels = { night: `Night ${game.round}`, discussion: 'Gather', voting: 'Vote', reveal: 'Reveal', dawn: 'Dawn' };
   const current = PHASE_STEPS.indexOf(game.phase === 'night' ? 'night' : townHallStage(game));
   bar.innerHTML = PHASE_STEPS.map((step, i) =>
     `<div class="phase-step${i === current ? ' current' : i < current ? ' done' : ''}">${labels[step]}</div>`
@@ -2021,6 +2021,14 @@ function renderTownHallArea(game, me) {
     return;
   }
 
+  if (stage === 'dawn') {
+    area.innerHTML = `<div class="gather-alert">
+      <div class="gather-title">🌅 Dawn</div>
+      <div>Listen to the Game Master.</div>
+    </div>`;
+    return;
+  }
+
   if (!canVote(me, game)) {
     area.innerHTML = `<div class="submitted-banner">👻 You've used your final vote.</div>`;
     return;
@@ -2126,12 +2134,14 @@ document.addEventListener('visibilitychange', () => {
 // ============================================================
 // NIGHT RESOLUTION
 // ============================================================
-// Works out what one night's actions do. Used for the GM's live preview,
-// for actually ending the night, and for the Town Hall script.
-// Returns { acts, updates, report }:
-//   acts    — the night's actions in resolution order, annotated with notes
-//   updates — Firebase multi-path updates to apply when the night ends
-//   report  — script lines describing the night (GM-only notes in [brackets])
+// Works out what one night's actions do. Used for the GM's live preview, when the
+// night ends, and again at dawn, when attacks land on whoever is still alive after the vote.
+// Returns { acts, updates, dawnUpdates, gatherNotes, report }:
+//   acts        — the night's actions in resolution order, annotated with notes
+//   updates     — Firebase multi-path updates to apply when the night ends
+//   dawnUpdates — wounds and deaths to apply after the vote
+//   gatherNotes — GM-only notes for the Town Hall script
+//   report      — dawn script lines (GM-only notes in [brackets])
 
 function resolveNight(game, roundActions, players) {
   const byId = id => players.find(p => p.id === id);
@@ -2140,6 +2150,8 @@ function resolveNight(game, roundActions, players) {
     .sort((a, b) => (ACTION_ORDER[a.type] || 99) - (ACTION_ORDER[b.type] || 99) || a.timestamp - b.timestamp);
   const active = type => acts.filter(a => a.type === type && !a.blocked);
   const updates = {};
+  const dawnUpdates = {};
+  const gatherNotes = [];
   const gmNotes = [];
 
   // 1. Seductress — a distracted player's action has no effect
@@ -2169,12 +2181,13 @@ function resolveNight(game, roundActions, players) {
   // 3. Symbiote bond
   let bond = game.symbiote || null;
   active('bond').forEach(a => {
+    if (bond?.aId === a.fromId && bond.bId === a.targetId) return; // Formed when the night ended
     if (bond) { a.notes.push('a bond already exists — no effect'); return; }
     bond = { aId: a.fromId, aName: a.fromName, bId: a.targetId, bName: a.targetName };
     updates.symbiote = bond;
     updates[`players/${a.fromId}/actionUsed`] = true;
     a.notes.push('fates linked from now on');
-    gmNotes.push(`[NOTE: Symbiote bond formed between ${a.fromName} and ${a.targetName}. Keep it secret — the app links their fates.]`);
+    gatherNotes.push(`[NOTE: Symbiote bond formed between ${a.fromName} and ${a.targetName}. Keep it secret — the app links their fates.]`);
   });
 
   // 4. Protection and potions — each one cancels a single attack on its target
@@ -2241,11 +2254,17 @@ function resolveNight(game, roundActions, players) {
     if (p.role === 'tank' && !p.wounded && n === 1) wounded.push(p);
     else died.push(p);
   });
+  const wasted = new Set();
   hits.forEach(a => {
     if (wounded.some(p => p.id === a.targetId)) a.notes.push('Tank — WOUNDED, survives');
     else if (died.some(p => p.id === a.targetId)) a.notes.push('KILLS');
+    else if (byId(a.targetId)?.eliminated) {
+      a.notes.push('NO EFFECT — already out of the game');
+      wasted.add(a.targetName);
+    }
   });
-  wounded.forEach(p => { updates[`players/${p.id}/wounded`] = true; });
+  wasted.forEach(name => gmNotes.push(`[NOTE: ${name} was already out of the game, so the attack on them was wasted.]`));
+  wounded.forEach(p => { dawnUpdates[`players/${p.id}/wounded`] = true; });
 
   // Symbiote — if one of the pair dies, so does the other
   if (bond) {
@@ -2257,7 +2276,7 @@ function resolveNight(game, roundActions, players) {
       }
     });
   }
-  died.forEach(p => { updates[`players/${p.id}/eliminated`] = true; });
+  died.forEach(p => { dawnUpdates[`players/${p.id}/eliminated`] = true; });
 
   // 7. Town Hall effects
   active('double').forEach(a => {
@@ -2275,7 +2294,7 @@ function resolveNight(game, roundActions, players) {
   const report = [];
   wolfBlocked.forEach(id => {
     const p = byId(id);
-    if (!p) return;
+    if (!p || p.eliminated) return;
     if (died.includes(p) || wounded.includes(p)) {
       gmNotes.push(`[NOTE: ${p.name} was protected, but more wolves attacked than the protection could stop.]`);
       return;
@@ -2292,7 +2311,7 @@ function resolveNight(game, roundActions, players) {
   if (!report.length) report.push('"The night passed quietly. Nobody was killed."');
   report.push(...gmNotes);
 
-  return { acts, updates, report };
+  return { acts, updates, dawnUpdates, gatherNotes, report };
 }
 
 // Escape the script, then highlight [GM notes] in gold
@@ -2330,7 +2349,8 @@ function renderGm(game) {
 const TOWN_HALL_BANNER = {
   discussion: '🕯️ Town Hall — gather & discuss',
   voting: '🗳️ Town Hall — voting',
-  reveal: '🪧 Town Hall — the reveal'
+  reveal: '🪧 Town Hall — the reveal',
+  dawn: '🌅 Dawn'
 };
 
 function updateGmPhaseBanner(game) {
@@ -2398,8 +2418,9 @@ function renderGmActionInbox(game) {
   const inbox = document.getElementById('gm-action-inbox');
   const resolution = document.getElementById('gm-resolution');
   const thisRound = getRoundActions(game);
-  // During the night the preview below already lists every action
-  inbox.closest('.card').style.display = game.phase === 'night' && thisRound.length ? 'none' : '';
+  const previewing = game.phase === 'night' || (game.phase === 'townhall' && game.townHallStage !== 'dawn');
+  // Until dawn the preview below already lists every action
+  inbox.closest('.card').style.display = previewing && thisRound.length ? 'none' : '';
 
   if (!thisRound.length) {
     inbox.innerHTML = '<p class="text-mist text-small">No actions this night yet.</p>';
@@ -2416,14 +2437,14 @@ function renderGmActionInbox(game) {
     </div>`;
   }).join('');
 
-  if (game.phase !== 'night') {
+  if (!previewing) {
     resolution.innerHTML = '<p class="text-mist text-small">This night has been resolved — see the GM Script on the Town Hall tab.</p>';
     return;
   }
 
-  // Live preview of what will happen when the night ends
-  const { acts, report } = resolveNight(game, thisRound, getPlayerList(game));
-  let resHtml = '<p class="text-mist text-small" style="margin-bottom:8px">The app applies these in order when you end the night:</p>';
+  // Live preview of what will happen, kept up to date through the vote
+  const { acts, gatherNotes, report } = resolveNight(game, thisRound, getPlayerList(game));
+  let resHtml = '<p class="text-mist text-small" style="margin-bottom:8px">The Seer, Bard, Scapegoat and Symbiote take effect when the night ends. Attacks land after the vote:</p>';
   acts.forEach(a => {
     const note = a.notes.length ? ' → ' + esc(a.notes.join('; ')) : '';
     resHtml += `<div class="resolution-step ${a.cls}">${ROLES[a.role]?.emoji||'?'} <strong>${esc(a.fromName)}</strong>: ${esc(actionDescription(a))}${note}</div>`;
@@ -2431,7 +2452,7 @@ function renderGmActionInbox(game) {
   if (game.symbiote) {
     resHtml += `<div class="resolution-step">🔗 Symbiote bond: if either <strong>${esc(game.symbiote.aName)}</strong> or <strong>${esc(game.symbiote.bName)}</strong> dies, both die.</div>`;
   }
-  resHtml += `<h3 class="mt-16">If you end the night now</h3><div class="gm-script-box">${formatScript(report.join('\n'))}</div>`;
+  resHtml += `<h3 class="mt-16">At dawn, as things stand</h3><div class="gm-script-box">${formatScript([...gatherNotes, ...report].join('\n'))}</div>`;
   resolution.innerHTML = resHtml;
 }
 
@@ -2457,7 +2478,8 @@ function townHallNextButton(game) {
   const stage = townHallStage(game);
   if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openVoting()">Open the Floor to Voting 🗳️</button>`;
   if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
-  return `<button class="btn btn-gold mt-8" onclick="advanceToNight()">Move On — Start Night ${game.round + 1} 🌙</button>`;
+  if (stage === 'reveal') return `<button class="btn btn-gold mt-8" onclick="advanceToDawn()">Move On — Go to Dawn 🌅</button>`;
+  return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${game.round + 1} 🌙</button>`;
 }
 
 function renderGmVoting(game) {
@@ -2472,7 +2494,7 @@ function renderGmVoting(game) {
 
   // The script is only needed while it's being read out
   document.getElementById('gm-script-card').style.display =
-    game.phase === 'townhall' && townHallStage(game) === 'discussion' ? '' : 'none';
+    (game.phase === 'townhall' && townHallStage(game) === 'discussion') || game.townHallStage === 'dawn' ? '' : 'none';
 
   if (game.phase !== 'townhall') {
     voteList.innerHTML = '<p class="text-mist text-small">Town Hall is not active.</p>';
@@ -2510,6 +2532,12 @@ function renderGmVoting(game) {
     return;
   }
 
+  if (stage === 'dawn') {
+    voteList.innerHTML = '';
+    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Read the script, then start the next night.</p>` + townHallNextButton(game);
+    return;
+  }
+
   // Reveal — decisions come first, with each slate listed below for the GM to call out
   const isSaving = p => p.eliminated && (!votes[p.id] || votes[p.id].saved);
   const saving = players.filter(isSaving);
@@ -2519,7 +2547,12 @@ function renderGmVoting(game) {
 
   let ctrlHtml = '';
   if (game.votedOut) {
-    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out.</div>`;
+    const roleOf = p => ROLES[p?.role]?.name || p?.role || 'unknown';
+    const out = getPlayerList(game).find(p => p.name === game.votedOut);
+    const bond = game.symbiote;
+    const partner = bond && out && (out.id === bond.aId ? game.players[bond.bId] : out.id === bond.bId ? game.players[bond.aId] : null);
+    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleOf(out))}</strong>.` +
+      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleOf(partner))}</strong>.` : '') + `</div>`;
   } else {
     ctrlHtml = `<div class="tally">` + getLivingPlayers(game).filter(p => totals[p.id] > 0).sort((a, b) => totals[b.id] - totals[a.id])
       .map(p => `<span class="badge">${esc(p.name)} <strong>${totals[p.id]}</strong></span>`).join('') + `</div>`;
@@ -2574,6 +2607,8 @@ async function endGameIfWon() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase === 'ended') return;
   const winner = checkWinCondition(getPlayerList(game));
+  // Attacks still to land could change who has the numbers, so wolves can only win once they have
+  if (winner === 'wolf' && game.phase === 'townhall' && game.townHallStage !== 'dawn') return;
   if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner });
 }
 
@@ -2641,8 +2676,8 @@ window.advanceToTownHall = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase !== 'night' || !await confirmPending(game)) return;
 
-  const { updates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
-  updates.gmScript = buildTownHallScript(game, updates, report);
+  const { updates, gatherNotes } = resolveNight(game, getRoundActions(game), getPlayerList(game));
+  updates.gmScript = buildTownHallScript(game, updates, gatherNotes);
   updates.phase = 'townhall';
   updates.townHallStage = 'discussion';
   updates.votes = null;
@@ -2652,19 +2687,19 @@ window.advanceToTownHall = async function() {
   await fbUpdate(`games/${state.roomCode}`, updates);
   toast('Everyone has been called to Town Hall 🔔');
   switchGmTab('vote');
-  await endGameIfWon();
   pollGame();
 };
 
-function buildTownHallScript(game, updates, report) {
-  const lines = [`"Gather round, villagers. The sun has risen on Night ${game.round}."`, '', ...report, ''];
+function buildTownHallScript(game, updates, notes) {
+  const lines = ['"Gather round, villagers. Plans have been made in the dark, and not everyone will see the morning."', ''];
+  if (notes.length) lines.push(...notes, '');
 
   const reminders = [];
   const bard = updates.bardDoubled || game.bardDoubled;
   if (bard) reminders.push(`[NOTE: ${bard.name}'s vote counts double this Town Hall. The tally applies this.]`);
   const sg = updates.scapegoatRedirect || game.scapegoatRedirect;
   if (sg) reminders.push(`[NOTE: Scapegoat — votes against ${sg.fromName} count against ${sg.toName} instead. The tally applies this.]`);
-  const jester = getPlayerList(game).find(p => p.role === 'jester' && !p.eliminated && !updates[`players/${p.id}/eliminated`]);
+  const jester = getPlayerList(game).find(p => p.role === 'jester' && !p.eliminated);
   if (jester) reminders.push(`[REMINDER: ${jester.name} is the Jester — if they are voted out, they win. Don't reveal this.]`);
   if (reminders.length) lines.push(...reminders, '');
 
@@ -2672,13 +2707,30 @@ function buildTownHallScript(game, updates, report) {
   return lines.join('\n');
 }
 
-window.advanceToNight = async function() {
+window.advanceToDawn = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
   if (!game || game.phase !== 'townhall') return;
 
   // Moving on without carrying out a decisive vote is allowed, but shouldn't happen by accident
   const { leaders } = tallyVotes(game);
-  if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been eliminated.\n\nStart the night anyway?`)) return;
+  if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been eliminated.\n\nMove on anyway?`)) return;
+
+  const { dawnUpdates, report } = resolveNight(game, getRoundActions(game), getPlayerList(game));
+  await fbUpdate(`games/${state.roomCode}`, {
+    ...dawnUpdates,
+    townHallStage: 'dawn',
+    votes: null,
+    tiebreak: null,
+    gmScript: ['"Night falls, and the village sleeps. Morning brings the news."', '', ...report].join('\n')
+  });
+  toast('Attacks have landed 🌅');
+  await endGameIfWon();
+  pollGame();
+};
+
+window.advanceToNight = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'townhall') return;
 
   const updates = nextNightUpdates(game, {
     townHallStage: null,
