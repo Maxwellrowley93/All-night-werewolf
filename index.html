@@ -781,6 +781,7 @@
   }
 
   /* The Game Master's overview of every slate */
+  .chalkboard.tappable { cursor: pointer; }
   .chalkboard {
     min-width: 0;
     text-align: center;
@@ -1794,6 +1795,7 @@ window.leaveGame = async function() {
   Object.assign(state, { roomCode: null, playerId: null, playerName: null, isGM: false, gameData: null, pollInterval: null, lastHash: null, phaseKey: null });
   pendingAction = { type: null };
   gmPlayerId = null;
+  gmChangingVote = false;
   document.getElementById('screen-gm').classList.remove('gm-player-open');
   document.getElementById('leave-btn').style.display = 'none';
   showScreen('landing');
@@ -2275,7 +2277,9 @@ function buildVoteChoices(game, voter) {
   return `<p class="text-mist text-small" style="margin-bottom:8px">${question}</p>` +
     buildTargetGrid(candidates, 'vote', { button: false }) +
     `<button class="btn ${voter.eliminated ? 'btn-ghost-blue' : 'btn-primary'} mt-16 confirm-action-btn" data-type="vote" onclick="submitVote()"${canConfirm('vote') ? '' : ' disabled'}>Confirm Vote</button>` +
-    (voter.eliminated && !voter.ghostVoteRound ? `<button class="btn btn-secondary mt-8" onclick="saveGhostVote()">${forGm ? 'Save Their Vote for Later' : 'Save My Vote for Later'}</button>` : '');
+    (voter.eliminated && (!voter.ghostVoteRound || voter.ghostVoteRound === game.round) && !game.votes?.[voter.id]?.saved
+      ? `<button class="btn btn-secondary mt-8" onclick="saveGhostVote()">${forGm ? 'Save Their Vote for Later' : 'Save My Vote for Later'}</button>`
+      : '');
 }
 
 // The blackboard covers the whole screen and shows only the name, so nothing else can be seen when it's held up
@@ -2296,16 +2300,21 @@ function renderSlateScreen(game, me) {
   screen.innerHTML = `<div class="slate-board" style="--chars:${name.length}">${esc(name)}</div>`;
 }
 
-function chalkSlate(voterName, vote) {
-  return `<div class="chalkboard">
+function chalkSlate(voterName, vote, voterId) {
+  const tap = voterId ? ` tappable" data-id="${esc(voterId)}" onclick="openPlayerPanel(this.dataset.id)` : '';
+  return `<div class="chalkboard${tap}">
     <div class="slate-from">${esc(voterName)} votes for</div>
     <div class="slate-name">${vote ? esc(vote.targetName) : '—'}</div>
   </div>`;
 }
 
 window.saveGhostVote = async function() {
-  if (!await saveGame({ [`votes/${actorId()}`]: { saved: true } })) return;
+  const id = actorId();
+  const updates = { [`votes/${id}`]: { saved: true } };
+  if (state.gameData.players[id]?.ghostVoteRound === state.gameData.round) updates[`players/${id}/ghostVoteRound`] = null;
+  if (!await saveGame(updates)) return;
   pendingAction = { type: null };
+  gmChangingVote = false;
   toast(gmPlayerId ? `Vote saved for later for ${state.gameData.players[gmPlayerId]?.name}` : 'Vote saved for later');
   pollGame();
 };
@@ -2324,6 +2333,7 @@ window.submitVote = async function() {
     return;
   }
   pendingAction = { type: null };
+  gmChangingVote = false;
   toast(gmPlayerId ? `Vote saved for ${state.gameData.players[gmPlayerId]?.name}` : 'Vote locked in');
   pollGame();
 };
@@ -2770,8 +2780,8 @@ function renderGmVoting(game) {
   // Reveal — decisions come first, with each slate listed below for the GM to call out
   const isSaving = p => p.eliminated && (!votes[p.id] || votes[p.id].saved);
   const saving = players.filter(isSaving);
-  voteList.innerHTML = '<p class="text-mist text-small" style="margin-bottom:4px">Call each name in turn. Each player holds up their phone.</p><div class="compact-grid">' +
-    players.filter(p => !isSaving(p)).map(p => chalkSlate(`${p.name}${p.eliminated ? ' 👻' : ''}`, votes[p.id])).join('') + '</div>' +
+  voteList.innerHTML = '<p class="text-mist text-small" style="margin-bottom:4px">Call each name in turn. Each player holds up their phone. Tap a vote to change it.</p><div class="compact-grid">' +
+    players.filter(p => !isSaving(p)).map(p => chalkSlate(`${p.name}${p.eliminated ? ' 👻' : ''}`, votes[p.id], p.id)).join('') + '</div>' +
     (saving.length ? `<div class="info-box blue mt-8">👻 Saved their vote: ${esc(saving.map(p => p.name).join(', '))}</div>` : '');
 
   let ctrlHtml = '';
@@ -2986,9 +2996,11 @@ window.endGame = async function() {
 // night action or vote, clear one so it can be redone, or bring back a player eliminated by mistake.
 
 let gmPlayerId = null;
+let gmChangingVote = false;
 
 window.openPlayerPanel = function(playerId) {
   gmPlayerId = playerId;
+  gmChangingVote = false;
   pendingAction = { type: null };
   document.getElementById('screen-gm').classList.add('gm-player-open');
   renderPlayerPanel(state.gameData);
@@ -2997,6 +3009,7 @@ window.openPlayerPanel = function(playerId) {
 
 window.closePlayerPanel = function() {
   gmPlayerId = null;
+  gmChangingVote = false;
   pendingAction = { type: null };
   document.getElementById('screen-gm').classList.remove('gm-player-open');
   fitScreen();
@@ -3014,7 +3027,8 @@ function renderPlayerPanel(game) {
   const sections = [`<div class="info-box">${esc(role?.name || p.role)} (${esc(TEAMS[role?.team]?.reveal || '')})${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
 
   if (game.phase === 'night' && !p.eliminated) sections.push(gmActionSection(game, player));
-  if (game.phase === 'townhall' && townHallStage(game) === 'voting' && canVote(p, game)) sections.push(gmVoteSection(game, player));
+  const stage = game.phase === 'townhall' ? townHallStage(game) : null;
+  if ((stage === 'voting' || stage === 'reveal') && canVote(p, game)) sections.push(gmVoteSection(game, player));
   if (p.eliminated) {
     sections.push(`<button class="btn btn-secondary mt-8" onclick="revivePlayer()">Bring ${esc(p.name)} Back (Undo Elimination)</button>`);
   }
@@ -3034,14 +3048,46 @@ function gmActionSection(game, player) {
   return `<p class="text-mist text-small" style="margin-bottom:8px">Enter ${name}'s action:</p>` + buildActionChoices(game, player);
 }
 
-// The GM sees whether a player has voted, but not who for
+// While voting is open the GM sees whether a player has voted, not who for. At the reveal every vote is
+// on show anyway, so the GM sees it and can change it.
 function gmVoteSection(game, player) {
   const name = esc(player.name);
   const vote = game.votes?.[player.id];
   if (!vote) return buildVoteChoices(game, player);
-  return `<div class="submitted-banner">${vote.saved ? `👻 ${name} saved their final vote.` : `🔒 ${name} has voted.`}</div>
-    <button class="btn btn-secondary mt-8" onclick="clearPlayerVote()">Clear So They Can Vote Again</button>`;
+
+  const revealed = townHallStage(game) === 'reveal';
+  const current = vote.saved ? `👻 ${name} saved their final vote.`
+    : revealed ? `🪧 ${name} voted for <strong>${esc(vote.targetName)}</strong>.`
+    : `🔒 ${name} has voted.`;
+  const eliminatedNote = revealed && game.votedOut
+    ? `<p class="text-mist text-small mt-8">${esc(game.votedOut)} has already been eliminated. If a change alters the result, bring them back from their panel.</p>`
+    : '';
+  if (gmChangingVote) {
+    return `<div class="submitted-banner">${current}</div>${eliminatedNote}` + buildVoteChoices(game, player) +
+      `<button class="btn btn-secondary mt-8" onclick="keepPlayerVote()">Keep This Vote</button>`;
+  }
+  return `<div class="submitted-banner">${current}</div>${eliminatedNote}
+    <button class="btn btn-secondary mt-8" onclick="changePlayerVote()">Change Their Vote</button>` +
+    (revealed ? '' : `<button class="btn btn-secondary mt-8" onclick="clearPlayerVote()">Clear So They Can Vote Again</button>`);
 }
+
+window.changePlayerVote = function() {
+  gmChangingVote = true;
+  const vote = state.gameData.votes?.[gmPlayerId];
+  // At the reveal the GM already sees this vote, so start from it. While voting is open it stays secret.
+  pendingAction = townHallStage(state.gameData) === 'reveal' && vote?.targetId
+    ? { type: 'vote', targetId: vote.targetId, targetName: vote.targetName }
+    : { type: null };
+  renderPlayerPanel(state.gameData);
+  fitScreen();
+};
+
+window.keepPlayerVote = function() {
+  gmChangingVote = false;
+  pendingAction = { type: null };
+  renderPlayerPanel(state.gameData);
+  fitScreen();
+};
 
 window.clearPlayerAction = async function() {
   const game = await fbGet(`games/${state.roomCode}`);

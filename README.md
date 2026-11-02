@@ -77,7 +77,8 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 
 ## If something goes wrong
 
-- **A phone dies or a player taps the wrong name.** On the **Players** tab, the GM taps that player to open their panel. At night the GM can enter their action, with the same choices their phone shows, or clear one so it can be redone. During voting the GM can enter their vote, save a ghost's final vote, or clear a vote so it can be cast again. The GM sees whether someone has voted, not who for.
+- **A phone dies or a player taps the wrong name.** On the **Players** tab, the GM taps that player to open their panel. At night the GM can enter their action, with the same choices their phone shows, or clear one so it can be redone. During voting the GM can enter their vote, save a ghost's final vote, change a vote, or clear one so it can be cast again. While voting is open the GM sees whether someone has voted, not who for.
+- **A vote is wrong at the reveal.** On the **Town Hall** tab, tap that player's blackboard (or tap them on the Players tab). The GM sees their vote and can change it, or switch a ghost's vote to saved. The tally and the player's blackboard update straight away. If someone has already been eliminated and the change alters the result, bring them back from their panel.
 - **The GM eliminates the wrong player.** Tap that player and choose **Bring Back (Undo Elimination)**. This can't undo the end of a game.
 - **The GM's phone dies.** The GM's screen shows a 4-digit **GM code**. On any other phone, open the game, enter the room code, tap **Game Master's phone died? Take over here**, enter the GM code and tap **Resume as Game Master**. The game carries on from where it was.
 - **Something didn't save.** If a phone loses its connection, it says "Didn't save" and keeps the choice on screen, so the player can tap Confirm again. A night action and its "done" mark always save together.
