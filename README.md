@@ -15,6 +15,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 ### 2. Night
 - Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Banish, Dawn) and a face-down card.
 - Each player taps the card to see their role and their action, then taps again to hide it. The card also hides itself after they confirm an action, if they switch apps, and at each new stage of the game.
+- The card says which team the player is on: Villager team, Werewolf team, or, for the Jester, no team. When a role is revealed, the GM's script gives the team too.
 - Werewolves see the rest of their pack on the card.
 - Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
 - Everyone mingles, schemes and bluffs.

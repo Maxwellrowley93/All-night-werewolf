@@ -377,6 +377,19 @@
     margin-bottom: 8px;
     text-shadow: 0 0 20px rgba(232,213,163,0.5);
   }
+  /* Which side the player is on, so nobody is left unsure */
+  .role-team {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+  .role-team.team-village { background: rgba(60,110,60,0.25); border: 1px solid rgba(90,160,90,0.6); color: #A0E0A0; }
+  .role-team.team-wolf { background: rgba(139,26,26,0.45); border: 1px solid rgba(200,80,80,0.7); color: #FFB0B0; }
+  .role-team.team-jester { background: rgba(120,60,140,0.3); border: 1px solid rgba(180,110,200,0.6); color: #E0B0F0; }
   .role-reveal-front .role-desc {
     font-size: 15px;
     color: var(--pale);
@@ -943,6 +956,7 @@
   #app.in-game .role-reveal-card.tall .role-reveal-back h3 { font-size: 18px; }
   #app.in-game .role-reveal-card.tall .role-reveal-back p { font-size: 15px; line-height: 1.4; }
   #app.in-game .role-reveal-front .role-name { font-size: 18px; margin-bottom: 2px; }
+  #app.in-game .role-team { margin-bottom: 4px; padding: 2px 8px; font-size: 12px; }
   #app.in-game .role-reveal-front .role-desc { font-size: 13px; line-height: 1.25; margin-bottom: 2px; }
   #app.in-game .role-reveal-front .role-desc:empty { display: none; }
   #app.in-game .role-reveal-front .role-ability { font-size: 14px; line-height: 1.25; padding-top: 4px; margin-top: 2px; }
@@ -1110,6 +1124,7 @@
         </div>
         <div class="role-reveal-front" id="roleCardFront">
           <div class="role-name" id="playerRoleName"></div>
+          <div class="role-team" id="playerRoleTeam"></div>
           <div class="role-desc" id="playerRoleDesc"></div>
           <div class="role-ability" id="playerRoleAbility"></div>
           <!-- Werewolf partners -->
@@ -1841,6 +1856,9 @@ function renderPlayer(game) {
   const townHallArea = document.getElementById('playerTownHallArea');
 
   document.getElementById('playerRoleName').textContent = `${role?.emoji || ''} ${role?.name || me.role}`;
+  const team = document.getElementById('playerRoleTeam');
+  team.className = `role-team team-${role?.team}`;
+  team.textContent = TEAMS[role?.team]?.card || '';
   document.getElementById('playerRoleDesc').textContent = role?.desc || '';
   document.getElementById('playerRoleAbility').textContent = (role?.ability || '') +
     (me.wounded && !me.eliminated ? ' 🩹 Wounded: one more attack kills you.' : '');
@@ -2405,7 +2423,7 @@ function resolveNight(game, roundActions, players) {
   } else if (died.length > 1) {
     report.push(`"A grim morning. We found ${died.slice(0, -1).map(p => p.name).join(', ')} and ${died[died.length - 1].name} dead."`);
   }
-  died.forEach(p => report.push(`[Reveal ${p.name}'s role: ${ROLES[p.role]?.name || p.role}]`));
+  died.forEach(p => report.push(`[Reveal ${p.name}'s role: ${roleReveal(p)}]`));
   if (!report.length) report.push('"The night passed quietly. Nobody was killed."');
   report.push(...gmNotes);
 
@@ -2645,12 +2663,11 @@ function renderGmVoting(game) {
 
   let ctrlHtml = '';
   if (game.votedOut) {
-    const roleOf = p => ROLES[p?.role]?.name || p?.role || 'unknown';
     const out = getPlayerList(game).find(p => p.name === game.votedOut);
     const bond = game.symbiote;
     const partner = bond && out && (out.id === bond.aId ? game.players[bond.bId] : out.id === bond.bId ? game.players[bond.aId] : null);
-    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleOf(out))}</strong>.` +
-      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleOf(partner))}</strong>.` : '') + `</div>`;
+    ctrlHtml = `<div class="info-box warning">☠️ ${esc(game.votedOut)} has been voted out. Reveal their role: <strong>${esc(roleReveal(out))}</strong>.` +
+      (partner ? `<br>🔗 ${esc(partner.name)} dies with them. Reveal their role: <strong>${esc(roleReveal(partner))}</strong>.` : '') + `</div>`;
   } else {
     ctrlHtml = `<div class="tally">` + getLivingPlayers(game).filter(p => totals[p.id] > 0).sort((a, b) => totals[b.id] - totals[a.id])
       .map(p => `<span class="badge">${esc(p.name)} <strong>${totals[p.id]}</strong></span>`).join('') + `</div>`;
@@ -2864,6 +2881,19 @@ function checkWinCondition(players) {
 // ============================================================
 // GM SETUP — ROLE CONFIGURATION
 // ============================================================
+
+const TEAMS = {
+  village: { card: '🏡 Villager team', reveal: 'Villager team' },
+  wolf: { card: '🐺 Werewolf team', reveal: 'Werewolf team' },
+  jester: { card: '🃏 No team: you win alone', reveal: 'plays alone' }
+};
+
+// A role as the GM reveals it, with the team, e.g. "Seer (Villager team)"
+function roleReveal(p) {
+  const role = ROLES[p?.role];
+  if (!role) return p?.role || 'unknown';
+  return `${role.name} (${TEAMS[role.team]?.reveal})`;
+}
 
 const defaultRoles = { werewolf: 2, villager: 3, seer: 1, doctor: 1 };
 let roleConfig = { ...defaultRoles };
