@@ -1,0 +1,94 @@
+{
+  "rules": {
+    "games": {
+      "$room": {
+        ".read": true,
+        ".write": "$room.matches(/^[A-Z]{4}$/)",
+        ".validate": "newData.hasChildren(['phase', 'round'])",
+        "phase": { ".validate": "newData.isString() && newData.val().matches(/^(lobby|night|townhall|ended)$/)" },
+        "round": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "townHallStage": { ".validate": "newData.isString() && newData.val().matches(/^(discussion|voting|reveal|dawn)$/)" },
+        "winner": { ".validate": "newData.isString() && newData.val().matches(/^(village|wolf|jester)$/)" },
+        "gmScript": { ".validate": "newData.isString() && newData.val().length <= 10000" },
+        "votedOut": { ".validate": "newData.isString() && newData.val().length <= 20" },
+        "tiebreak": {
+          "$index": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" }
+        },
+        "bardDoubled": {
+          ".validate": "newData.hasChildren(['id', 'name'])",
+          "id": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+          "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other": { ".validate": false }
+        },
+        "scapegoatRedirect": {
+          ".validate": "newData.hasChildren(['fromId', 'fromName', 'toId', 'toName'])",
+          "fromId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+          "fromName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "toId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+          "toName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other": { ".validate": false }
+        },
+        "symbiote": {
+          ".validate": "newData.hasChildren(['aId', 'aName', 'bId', 'bName'])",
+          "aId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+          "aName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "bId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+          "bName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other": { ".validate": false }
+        },
+        "players": {
+          "$player": {
+            ".validate": "$player.matches(/^[a-z0-9]{1,20}$/) && newData.hasChildren(['name'])",
+            "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
+            "role": { ".validate": "newData.isString() && newData.val().matches(/^(werewolf|villager|seer|doctor|witch|hunter|bard|scapegoat|jester|seductress|puppetmaster|symbiote|mayor|tank|hairy_villager)$/)" },
+            "eliminated": { ".validate": "newData.isBoolean()" },
+            "wounded": { ".validate": "newData.isBoolean()" },
+            "actionSubmitted": { ".validate": "newData.isBoolean()" },
+            "actionUsed": { ".validate": "newData.isBoolean()" },
+            "witchHeal": { ".validate": "newData.isBoolean()" },
+            "witchPoison": { ".validate": "newData.isBoolean()" },
+            "mayorRevealed": { ".validate": "newData.isBoolean()" },
+            "ghostVoteRound": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "seerResults": {
+              "$result": {
+                ".validate": "$result.matches(/^r[0-9]{1,3}$/) && newData.hasChildren(['targetName', 'alignment', 'round'])",
+                "targetName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+                "alignment": { ".validate": "newData.isString() && newData.val().matches(/^(wolf|village)$/)" },
+                "round": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+        "votes": {
+          "$voter": {
+            ".validate": "$voter.matches(/^[a-z0-9]{1,20}$/) && (newData.hasChildren(['saved']) || newData.hasChildren(['targetId', 'targetName']))",
+            "saved": { ".validate": "newData.isBoolean()" },
+            "targetId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+            "targetName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "$other": { ".validate": false }
+          }
+        },
+        "actions": {
+          "$action": {
+            ".validate": "$action.matches(/^[-_A-Za-z0-9]{1,40}$/) && newData.hasChildren(['fromId', 'fromName', 'role', 'type', 'targetId', 'targetName', 'round', 'timestamp'])",
+            "fromId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+            "fromName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "role": { ".validate": "newData.isString() && newData.val().matches(/^(werewolf|villager|seer|doctor|witch|hunter|bard|scapegoat|jester|seductress|puppetmaster|symbiote|mayor|tank|hairy_villager)$/)" },
+            "type": { ".validate": "newData.isString() && newData.val().matches(/^(kill|inspect|protect|heal|poison|shoot|distract|control|double|redirect|bond)$/)" },
+            "targetId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+            "targetName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "redirectId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,20}$/)" },
+            "redirectName": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "round": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "timestamp": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

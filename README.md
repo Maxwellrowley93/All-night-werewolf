@@ -79,21 +79,14 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 - **Refreshing is safe.** Each phone remembers its game, so reloading the page or reopening the browser puts you straight back in. A player who loses their place (for example, on a new phone) can rejoin by entering the same name and room code. The GM can only resume on the device that created the game.
 - **No scrolling.** Every in-game screen is laid out compactly and shrinks itself to fit the phone, including with 20 players.
 - **Leave game**, always at the very bottom of the screen, takes a phone out of the current game.
-- **Roles are not cryptographically secret.** All game data, including every player's role, is stored in an open Firebase database. Someone determined could read it with their browser's developer tools. It's built for friends playing in the same room, not for strangers online.
+- **Roles are not cryptographically secret.** There are no logins, so anyone with a room code can read that game, including every player's role, or change or delete it. `database.rules.json` stops anyone listing every room, wiping them all at once or adding fields the game doesn't use, and it limits the size of each entry. It can't limit how many entries get added. It's built for friends playing in the same room, not for strangers online.
 
 ## Hosting your own copy
 
 The whole app is a single file, `index.html`. There's no build step and nothing to install.
 
 1. **Firebase:** create a free project at https://console.firebase.google.com and add a **Realtime Database**.
-2. In the database **Rules**, allow reads and writes to the `games` path:
-   ```json
-   {
-     "rules": {
-       "games": { ".read": true, ".write": true }
-     }
-   }
-   ```
+2. In the database **Rules**, paste in the contents of `database.rules.json` and publish them.
 3. In `index.html`, set `FIREBASE_URL` to your database URL.
 4. **Hosting:** any static host works. This repo uses GitHub Pages, serving `index.html` from the `main` branch.
 
