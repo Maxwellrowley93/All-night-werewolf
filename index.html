@@ -1236,7 +1236,7 @@
       <!-- Ghost notice -->
       <div id="playerGhostArea" style="display:none">
         <hr class="divider">
-        <div class="info-box blue">👻 You are a Ghost. You have no night action, but you have one final vote. Use it at any Town Hall, or save it for later.</div>
+        <div class="info-box blue" id="ghostInfo"></div>
       </div>
     </div>
   </div>
@@ -1737,9 +1737,36 @@ function allVotesIn(game) {
   return getVoters(game).every(p => game.votes?.[p.id]);
 }
 
+// Only dead villagers get a ghost vote. Dead wolves and the Jester have nothing left to vote for,
+// and nor does a Symbiote unless their host is a villager who is still alive.
+function hasGhostVote(p, game) {
+  if (p.role === 'symbiote') {
+    const host = game.symbiote?.aId === p.id ? game.players?.[game.symbiote.bId] : null;
+    return !!host && !host.eliminated && teamOf(game, p) === 'village';
+  }
+  return ROLES[p.role]?.team === 'village';
+}
+
 // A ghost has one final vote to use at a Town Hall of their choosing. A tiebreak at that same Town Hall still counts as part of it.
 function canVote(p, game) {
-  return !p.eliminated || !p.ghostVoteRound || p.ghostVoteRound === game.round;
+  if (!p.eliminated) return true;
+  return hasGhostVote(p, game) && (!p.ghostVoteRound || p.ghostVoteRound === game.round);
+}
+
+// What a ghost's phone says about their vote
+function ghostNote(p, game) {
+  const talk = 'You can still talk and share your theories.';
+  if (hasGhostVote(p, game)) {
+    return p.ghostVoteRound
+      ? `You've used your final vote. ${talk}`
+      : 'You have no night action, but you have one final vote. Use it at any Town Hall, or save it for later.';
+  }
+  if (p.role === 'symbiote') {
+    const host = game.players?.[game.symbiote?.bId];
+    return `${host?.eliminated ? 'Your host is gone' : "Your host isn't a villager"}, so you get no vote. ${talk}`;
+  }
+  if (p.role === 'jester') return `Nobody can vote you out now, so you get no vote. ${talk}`;
+  return `Dead Werewolves don't get a vote. ${talk}`;
 }
 
 function getVoters(game) {
@@ -1970,8 +1997,8 @@ async function pollGame() {
 // ============================================================
 
 function renderPlayer(game) {
-  const me = game.players?.[state.playerId];
-  if (!me) return;
+  if (!game.players?.[state.playerId]) return;
+  const me = { ...game.players[state.playerId], id: state.playerId };
 
   renderSlateScreen(game, me);
 
@@ -2070,6 +2097,7 @@ function renderPlayer(game) {
   // Ghost
   if (me.eliminated) {
     ghostArea.style.display = 'block';
+    document.getElementById('ghostInfo').textContent = `👻 You are a Ghost. ${ghostNote(me, game)}`;
     actionArea.style.display = 'none';
     return;
   }
@@ -2314,7 +2342,7 @@ function renderTownHallArea(game, me) {
   }
 
   if (!canVote(me, game)) {
-    area.innerHTML = `<div class="submitted-banner">👻 You've used your final vote.</div>`;
+    area.innerHTML = `<div class="submitted-banner">👻 ${hasGhostVote(me, game) ? "You've used your final vote." : "You don't get a ghost vote."}</div>`;
     return;
   }
 
