@@ -2997,7 +2997,8 @@ function townHallNextButton(game) {
   if (stage === 'discussion') return `<button class="btn btn-gold" onclick="openVoting()">Open the Floor to Voting 🗳️</button>`;
   if (stage === 'voting') return `<button class="btn btn-secondary" onclick="closeVoting()">Close Voting & Reveal</button>`;
   if (stage === 'reveal') return `<button class="btn btn-gold mt-8" onclick="advanceToDawn()">Move On — Go to Dawn 🌅</button>`;
-  // Dawn: once the Final is due there are no more nights
+  // Dawn: if the night's deaths decided the game, reveal the result; once the Final is due there are no more nights
+  if (checkWinCondition(game)) return `<button class="btn btn-gold" onclick="revealResult()">Reveal the Result 🏆</button>`;
   if (finalDue(game)) return `<button class="btn btn-gold" onclick="beginFinal()">Begin the Final 🏁</button>`;
   return `<button class="btn btn-gold" onclick="advanceToNight()">Start Night ${esc(game.round + 1)} 🌙</button>
     <button class="btn btn-secondary mt-8" onclick="beginFinal()">Begin the Final Early</button>`;
@@ -3079,7 +3080,9 @@ function renderGmVoting(game) {
 
   if (stage === 'dawn') {
     voteList.innerHTML = '';
-    controls.innerHTML = `<p class="text-mist text-small" style="margin-bottom:8px">Read the script, then ${finalDue(game) ? 'begin the Final' : 'start the next night'}.</p>` + townHallNextButton(game);
+    const winner = checkWinCondition(game);
+    controls.innerHTML = (winner ? `<div class="info-box warning">🏁 ${gameOverReason(game)}</div>` : '') +
+      `<p class="text-mist text-small" style="margin-bottom:8px">Read the script, then ${winner ? 'reveal the result' : finalDue(game) ? 'begin the Final' : 'start the next night'}.</p>` + townHallNextButton(game);
     return;
   }
 
@@ -3291,10 +3294,24 @@ window.advanceToDawn = async function() {
     tiebreak: null,
     gmScript: ['"Night falls, and the village sleeps. Morning brings the news."', '', ...report].join('\n')
   })) return;
+  // If these deaths decide the game, it waits at dawn so the GM can read out who died before revealing the result
   toast('Attacks have landed 🌅');
+  pollGame();
+};
+
+window.revealResult = async function() {
   await endGameIfWon();
   pollGame();
 };
+
+// Why a game is over, for the GM to see at dawn
+function gameOverReason(game) {
+  const living = getLivingPlayers(game);
+  const wolves = living.filter(isWerewolf).length;
+  if (!wolves) return 'Every Werewolf is dead, so the game is over.';
+  if (wolves > living.length - wolves) return 'The Werewolves now outnumber everyone else, so the game is over.';
+  return 'Only two players are left, so the game is over.';
+}
 
 window.advanceToNight = async function() {
   const game = await fbGet(`games/${state.roomCode}`);
