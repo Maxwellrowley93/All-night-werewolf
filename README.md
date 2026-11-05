@@ -11,7 +11,8 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 2. Players open the app, enter their name and the room code, and tap **Join Game**. You can also share `…/All-night-werewolf/?room=ABCD` and the code is filled in for you.
 3. The GM chooses how many of each role to include, or taps **Simple** or **Advanced** under **Quick setup** to fill in a balanced line-up for the players who have joined (see [Suggested line-ups](#suggested-line-ups)), then adjusts it if they like. The role count must match the number of players and include at least one Werewolf. The Mayor, Bard, Scapegoat and Symbiote are limited to one each.
 4. The GM sets when **the Final** begins: by default when the number of players left equals the starting Werewolves + 2, adjustable with − and +.
-5. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
+5. The GM sets the **night timer** (5 minutes by default, or Off).
+6. The GM taps **Assign Roles & Start Game**. Roles are dealt at random, Night 1 begins, and the GM's controls appear on the **Players**, **Actions** and **Town Hall** tabs.
 
 ### 2. Night
 - Every player's screen looks the same: a bar showing the phase of the game (Night, Gather, Vote, Banish, Dawn), a status line such as "🐺 2 of 3 still hidden · 🏁 Final at 5 players · 9 left", and a face-down card.
@@ -19,7 +20,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 - The card says which team the player is on: Villager team, Werewolf team, or, for the Jester, no team. When a role is revealed, the GM's script gives the team too.
 - Werewolves see the rest of their pack on the card.
 - Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
-- Everyone mingles, schemes and bluffs.
+- Everyone mingles, schemes and bluffs. If the night timer is on, every phone counts down to Town Hall ("⏳ 3:42 until Town Hall") and buzzes at "⏰ Time to gather!". The timer only informs: the night ends when the GM taps End Night, and the GM can tap **+1 min** to give everyone longer.
 - On the **Actions** tab, the GM sees every action as it comes in, a step-by-step preview of how the night will play out, and the script that will be read.
 - On the **Players** tab, the GM taps **End Night → Call Everyone to Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first. Every phone then tells its player to gather.
 
