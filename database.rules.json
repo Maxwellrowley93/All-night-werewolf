@@ -13,6 +13,9 @@
         "final": { ".validate": "newData.isBoolean()" },
         "finalAt": { ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 20" },
         "finalReveal": { ".validate": "newData.isBoolean()" },
+        "hostMode": { ".validate": "newData.isBoolean()" },
+        "nightMinutes": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 60" },
+        "timerEndsAt": { ".validate": "newData.isNumber()" },
         "endVotes": {
           "$voter": { ".validate": "$voter.matches(/^[a-z0-9]{1,20}$/) && newData.isString() && newData.val().matches(/^(end|banish)$/)" }
         },

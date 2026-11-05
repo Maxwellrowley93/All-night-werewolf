@@ -969,6 +969,14 @@
   #app.in-game .preset-row .btn + .btn { margin-top: 0; }
   #app.in-game .toggle-row.final-setting { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
 
+  /* The night timer: a countdown to Town Hall */
+  .timer-line { display: flex; align-items: center; justify-content: center; gap: 8px; margin: -2px 0 6px; font-size: 15px; font-weight: 600; color: var(--gold); }
+  .timer-line.up { color: #FF9A9A; animation: gather-pulse 1.6s ease-in-out infinite; border-radius: 6px; }
+  .timer-line .btn { width: auto; margin: 0; }
+  #app.in-game #screen-gm .timer-line { font-size: calc(15px * var(--gm)); }
+  #app.in-game #screen-gm .timer-line .btn { padding: calc(4px * var(--gm)) 8px; font-size: calc(11px * var(--gm)); }
+  #night-minutes-count { min-width: 3.2em; }
+
   /* The Final's reveal: each survivor's team fills their screen */
   #identity-screen { display: none; position: fixed; inset: 0; z-index: 2000; cursor: pointer; }
   #identity-screen.show { display: flex; align-items: center; justify-content: center; }
@@ -1223,6 +1231,7 @@
     <div class="card">
       <div class="phase-bar" id="player-phase-bar"></div>
       <div class="status-line" id="playerStatusLine"></div>
+      <div class="timer-line" id="playerTimer" style="display:none"><span class="timer-text"></span></div>
       <div class="info-box" id="mayorBox" style="display:none"></div>
 
       <!-- Town Hall: gather call, ballot and chalk slate -->
@@ -1281,6 +1290,10 @@
   <div class="screen" id="screen-gm">
     <div class="phase-banner phase-lobby" id="gm-phase-banner">Lobby</div>
     <div class="status-line" id="gmStatusLine"></div>
+    <div class="timer-line" id="gmTimer" style="display:none">
+      <span class="timer-text"></span>
+      <button class="btn btn-secondary btn-sm" onclick="addTimerMinute()">+1 min</button>
+    </div>
 
     <div class="gm-tabs">
       <button class="gm-tab active" onclick="switchGmTab('players')" id="tab-players">Players</button>
@@ -1370,6 +1383,14 @@
           </div>
         </div>
         <p class="text-mist text-small" id="final-at-note"></p>
+        <div class="toggle-row final-setting">
+          <div class="toggle-label">⏳ Night timer</div>
+          <div class="count-control">
+            <button class="count-btn" onclick="adjustNightMinutes(-1)">−</button>
+            <span class="count-val" id="night-minutes-count">5 min</span>
+            <button class="count-btn" onclick="adjustNightMinutes(1)">+</button>
+          </div>
+        </div>
         <div class="info-box mt-8" id="role-total"></div>
         <button class="btn btn-gold" id="assign-roles-btn" onclick="assignRolesAndStart()">Assign Roles & Start Game</button>
       </div>
@@ -2077,6 +2098,7 @@ async function pollGame() {
   } else {
     renderPlayer(game);
   }
+  renderTimers();
   fitScreen();
 }
 
@@ -3227,6 +3249,7 @@ function unbondedSymbiote(game) {
 function nextNightUpdates(game, updates) {
   updates.phase = 'night';
   updates.round = (game.round || 0) + 1;
+  updates.timerEndsAt = timerEnd(game.nightMinutes);
   getLivingPlayers(game).forEach(p => { updates[`players/${p.id}/actionSubmitted`] = false; });
   return updates;
 }
@@ -3254,6 +3277,7 @@ window.advanceToTownHall = async function() {
   updates.votes = null;
   updates.tiebreak = null;
   updates.votedOut = null;
+  updates.timerEndsAt = null;
 
   if (!await saveGame(updates)) return;
   toast('Everyone has been called to Town Hall 🔔');
@@ -3418,6 +3442,51 @@ window.declareStalemate = async function() {
 window.endGame = async function() {
   if (!await askConfirm('End the game?')) return;
   if (!await saveGame({ phase: 'ended' })) return;
+  pollGame();
+};
+
+// ============================================================
+// NIGHT TIMER — a countdown to Town Hall. It only informs: the night still ends when the GM says so.
+// ============================================================
+
+// When a night of this many minutes ends, or null for no timer
+function timerEnd(minutes) {
+  return minutes ? Date.now() + minutes * 60000 : null;
+}
+
+function timerText(game) {
+  if (game?.phase !== 'night' || !game.timerEndsAt) return '';
+  const left = Math.ceil((game.timerEndsAt - Date.now()) / 1000);
+  if (left <= 0) return '⏰ Time to gather!';
+  return `⏳ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} until Town Hall`;
+}
+
+// Runs every second. The phones' clocks are close enough for a countdown.
+function renderTimers() {
+  const game = state.gameData;
+  const text = timerText(game);
+  const up = text.startsWith('⏰');
+  ['playerTimer', 'gmTimer'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.display = text ? '' : 'none';
+    el.classList.toggle('up', up);
+    el.querySelector('.timer-text').textContent = text;
+  });
+  // One buzz when time runs out, but not for a timer that had already run out when the page opened
+  if (!text) return;
+  if (!up) state.timerRunning = game.timerEndsAt;
+  else if (state.timerRunning === game.timerEndsAt && state.timerBuzzed !== game.timerEndsAt) {
+    state.timerBuzzed = game.timerEndsAt;
+    navigator.vibrate?.([200, 100, 200, 100, 200]);
+  }
+}
+setInterval(renderTimers, 1000);
+
+// Gives everyone another minute, starting from now if time has already run out
+window.addTimerMinute = async function() {
+  const game = await fbGet(`games/${state.roomCode}`);
+  if (!game || game.phase !== 'night') return;
+  if (!await saveGame({ timerEndsAt: Math.max(Date.now(), game.timerEndsAt || 0) + 60000 })) return;
   pollGame();
 };
 
@@ -3874,6 +3943,14 @@ window.adjustRole = function(key, delta) {
   fitScreen();
 };
 
+// How long each night lasts before players are told to gather. 0 turns the timer off.
+let nightMinutes = 5;
+window.adjustNightMinutes = function(delta) {
+  nightMinutes = Math.max(0, Math.min(30, nightMinutes + delta));
+  updateRoleTotal();
+  fitScreen();
+};
+
 // The Final's threshold: werewolves + 2, unless the GM picks a number
 let finalAtChoice = null;
 function finalAtValue() {
@@ -3886,6 +3963,7 @@ window.adjustFinalAt = function(delta) {
 };
 
 function updateRoleTotal() {
+  document.getElementById('night-minutes-count').textContent = nightMinutes ? `${nightMinutes} min` : 'Off';
   document.getElementById('final-at-count').textContent = finalAtValue();
   document.getElementById('final-at-note').textContent = finalAtChoice === null
     ? 'players left: werewolves + 2. Tap − or + to change it.'
@@ -3931,7 +4009,7 @@ window.assignRolesAndStart = async function() {
     [pool[i],pool[j]] = [pool[j],pool[i]];
   }
 
-  const updates = { phase: 'night', round: 1, finalAt: finalAtValue() };
+  const updates = { phase: 'night', round: 1, finalAt: finalAtValue(), nightMinutes, timerEndsAt: timerEnd(nightMinutes) };
   players.forEach((p, i) => {
     updates[`players/${p.id}/role`] = pool[i];
     if (pool[i] === 'mayor') updates[`players/${p.id}/mayorRevealed`] = true;
