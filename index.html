@@ -969,6 +969,22 @@
   #app.in-game .preset-row .btn + .btn { margin-top: 0; }
   #app.in-game .toggle-row.final-setting { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
 
+  /* Play and Host: the host's two tabs */
+  .host-tabs { display: flex; gap: 4px; width: 100%; max-width: 480px; margin-bottom: 6px; padding: 3px; background: rgba(0,0,0,0.3); border-radius: 10px; }
+  .host-tab {
+    flex: 1;
+    padding: 8px 4px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--mist);
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 12px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .host-tab.active { background: rgba(201,168,76,0.18); color: var(--moon); border-color: rgba(201,168,76,0.3); }
+
   /* The night timer: a countdown to Town Hall */
   .timer-line { display: flex; align-items: center; justify-content: center; gap: 8px; margin: -2px 0 6px; font-size: 15px; font-weight: 600; color: var(--gold); }
   .timer-line.up { color: #FF9A9A; animation: gather-pulse 1.6s ease-in-out infinite; border-radius: 6px; }
@@ -1189,6 +1205,12 @@
   </div>
 
   <!-- ====== LANDING SCREEN ====== -->
+  <!-- Play and Host: the host switches between their own role and the game's controls -->
+  <div class="host-tabs" id="host-tabs" style="display:none">
+    <button class="host-tab active" id="host-tab-role" onclick="setHostTab('role')">🃏 My Role</button>
+    <button class="host-tab" id="host-tab-host" onclick="setHostTab('host')">🎛️ Host</button>
+  </div>
+
   <div class="screen active" id="screen-landing">
     <div class="card">
       <h2>Enter the Village</h2>
@@ -1203,7 +1225,9 @@
         </div>
         <button class="btn btn-primary" onclick="joinGame()">Join Game</button>
         <div class="separator">— or —</div>
-        <button class="btn btn-secondary" onclick="createGame()">Create New Game (Game Master)</button>
+        <button class="btn btn-secondary" onclick="createGame(false)">Create Game (GM Only)</button>
+        <button class="btn btn-secondary" onclick="createGame(true)">Create Game (Play &amp; Host)</button>
+        <p class="text-mist text-small">GM Only: you run the game and see everything. Play &amp; Host: you get a role too, and your host controls never show anyone else's.</p>
         <details class="gm-resume">
           <summary>Game Master's phone died? Take over here</summary>
           <div class="label mt-8">GM Code</div>
@@ -1404,7 +1428,7 @@
 
 <div class="toast" id="toast"></div>
 
-<div id="slate-screen"></div>
+<div id="slate-screen" onclick="slateTapped()"></div>
 
 <!-- The Final's reveal: a survivor's team, full screen, to hold up -->
 <div id="identity-screen" onclick="toggleIdentity()"></div>
@@ -1992,6 +2016,8 @@ window.leaveGame = async function() {
   pendingAction = { type: null };
   gmPlayerId = null;
   gmChangingVote = false;
+  hostTab = 'role';
+  document.getElementById('host-tabs').style.display = 'none';
   document.getElementById('screen-gm').classList.remove('gm-player-open');
   document.getElementById('leave-btn').style.display = 'none';
   showScreen('landing');
@@ -2001,7 +2027,8 @@ window.leaveGame = async function() {
 // LANDING — CREATE / JOIN
 // ============================================================
 
-window.createGame = async function() {
+// hostPlays: the person creating the room also plays, and their host controls hide every secret
+window.createGame = async function(hostPlays = false) {
   const name = document.getElementById('playerName').value.trim();
   if (!name) { toast('Enter your name first'); return; }
 
@@ -2014,13 +2041,19 @@ window.createGame = async function() {
     round: 0,
     createdAt: Date.now()
   };
+  let playerId = 'GM';
+  if (hostPlays) {
+    playerId = generateId();
+    gameData.hostMode = true;
+    gameData.players = { [playerId]: { name, eliminated: false, wounded: false, actionSubmitted: false, actionUsed: false, witchHeal: true, witchPoison: true } };
+  }
 
   if (!await fbSet(`games/${code}`, gameData)) {
     toast("Couldn't reach the server. Check your connection.");
     return;
   }
 
-  Object.assign(state, { roomCode: code, playerId: 'GM', playerName: name, isGM: true, lastHash: null });
+  Object.assign(state, { roomCode: code, playerId, playerName: name, isGM: true, lastHash: null });
   enterGame();
   toast(`Room created: ${code}`);
 };
@@ -2093,7 +2126,12 @@ async function pollGame() {
     if (game.phase === 'ended' && !state.isGM) navigator.vibrate?.([200, 100, 200]);
   }
 
-  if (state.isGM) {
+  if (isPlayingHost(game)) {
+    // The host's controls first, then their own player screen, then whichever tab they're on
+    renderGm(game);
+    renderPlayer(game);
+    applyHostTab(game);
+  } else if (state.isGM) {
     renderGm(game);
   } else {
     renderPlayer(game);
@@ -2101,6 +2139,53 @@ async function pollGame() {
   renderTimers();
   fitScreen();
 }
+
+// ============================================================
+// PLAY AND HOST — the host is also a player, and their controls never show a secret
+// ============================================================
+
+function isPlayingHost(game) {
+  return !!(state.isGM && game?.hostMode && game.players?.[state.playerId]);
+}
+
+// While the host plays, they see a role only once the whole table knows it
+function roleIsPublic(game, p) {
+  return (p.eliminated && !game.finalOut?.[p.id]) || (p.role === 'mayor' && p.mayorRevealed);
+}
+
+let hostTab = 'role';
+
+function applyHostTab(game) {
+  const inGame = game.phase === 'night' || game.phase === 'townhall';
+  document.getElementById('host-tabs').style.display = inGame ? '' : 'none';
+  document.getElementById('host-tab-role').classList.toggle('active', hostTab === 'role');
+  document.getElementById('host-tab-host').classList.toggle('active', hostTab === 'host');
+  if (game.phase === 'lobby') showScreen('gm');
+  else if (game.phase === 'ended') showScreen('result');
+  else showScreen(hostTab === 'host' ? 'gm' : 'player-role');
+  // The host's own blackboard covers the screen only on their My Role tab
+  if (inGame && hostTab === 'host') {
+    document.getElementById('slate-screen').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+}
+
+window.setHostTab = function(tab) {
+  hostTab = tab;
+  hideRoleCard();
+  if (gmPlayerId) closePlayerPanel();
+  pendingAction = { type: null };
+  if (!state.gameData) return;
+  renderPlayer(state.gameData);
+  applyHostTab(state.gameData);
+  renderTimers();
+  fitScreen();
+};
+
+// A host holding up their own blackboard taps it to get back to their controls
+window.slateTapped = function() {
+  if (isPlayingHost(state.gameData)) setHostTab('host');
+};
 
 // ============================================================
 // PLAYER RENDER
@@ -2818,6 +2903,16 @@ function resolveNight(game, roundActions, players) {
   return { acts, updates, dawnUpdates, gatherNotes, report };
 }
 
+// The script without the GM's private notes, for a host who is also playing.
+// Role reveals are public, so they become lines to read out.
+function publicScript(text) {
+  return String(text || '').split('\n').map(line => {
+    const reveal = line.match(/^\[Reveal (.+)'s role: (.+)\]$/);
+    if (reveal) return `"${reveal[1]} was the ${reveal[2]}."`;
+    return line.startsWith('[') ? null : line;
+  }).filter(line => line !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Escape the script, then highlight [GM notes] in gold
 function formatScript(text) {
   return esc(text).replace(/(\[.*?\])/g, '<span style="color:var(--gold);font-style:normal;font-size:0.9em">$1</span>');
@@ -2836,6 +2931,9 @@ function renderGm(game) {
   }
   if (!document.getElementById('screen-gm').classList.contains('active')) showScreen('gm');
   updateGmPhaseBanner(game);
+  // While the host plays there's no Actions tab: it would show everyone's choices
+  document.getElementById('tab-actions').style.display = game.hostMode ? 'none' : '';
+  if (game.hostMode && document.getElementById('panel-actions').classList.contains('active')) switchGmTab('players');
   document.getElementById('gmStatusLine').textContent = statusLine(game);
 
   // Lobby shows just the room code and role setup
@@ -2890,16 +2988,20 @@ function renderGmPlayerList(game) {
   }
 
   const bond = game.symbiote;
+  const hidden = !!game.hostMode;
   const canEliminate = game.phase === 'night' || game.phase === 'townhall';
-  let html = canEliminate ? '<p class="text-mist text-small" style="margin-bottom:4px">Tap a player to enter their choice or fix a mistake.</p>' : '';
+  let html = canEliminate ? `<p class="text-mist text-small" style="margin-bottom:4px">Tap a player to ${hidden ? 'enter their vote' : 'enter their choice'} or fix a mistake.</p>` : '';
   html += '<div class="compact-grid">';
   players.forEach(p => {
     const isGhost = p.eliminated;
-    const bonded = bond && (p.id === bond.aId || p.id === bond.bId);
+    const bonded = !hidden && bond && (p.id === bond.aId || p.id === bond.bId);
+    const badge = !p.role ? '<span class="text-mist text-small">No role</span>'
+      : hidden && !roleIsPublic(game, p) ? '<span class="text-mist text-small">Role hidden</span>'
+      : roleBadge(p.role);
     html += `<div class="gm-player-cell ${isGhost ? 'ghost-card' : ''}">
       <div class="cell-text${canEliminate ? ' tappable' : ''}"${canEliminate ? ` data-id="${esc(p.id)}" onclick="openPlayerPanel(this.dataset.id)"` : ''}>
         <span class="player-name">${esc(p.name)}${isGhost?' 👻':''}${p.wounded?' 🩹':''}${bonded?' 🔗':''}</span>
-        ${p.role ? roleBadge(p.role) : '<span class="text-mist text-small">No role</span>'}
+        ${badge}
       </div>
       ${canEliminate && !isGhost
         ? `<button class="gm-x" aria-label="Eliminate ${esc(p.name)}" data-id="${esc(p.id)}" onclick="eliminatePlayer(this.dataset.id)">✕</button>`
@@ -2920,7 +3022,9 @@ function renderGmPhaseControls(game) {
     const pending = pendingPlayers(game);
     const actionCount = getRoundActions(game).length;
     html = `
-      <div class="info-box">${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}</div>
+      <div class="info-box">${game.hostMode
+        ? 'When everyone has finished, call Town Hall.'
+        : `${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}`}</div>
       <button class="btn btn-gold" onclick="advanceToTownHall()">End Night → Call Everyone to Town Hall 🔔</button>
     `;
   } else if (game.phase === 'townhall') {
@@ -2942,6 +3046,12 @@ function renderGmPhaseControls(game) {
 function renderGmActionInbox(game) {
   const inbox = document.getElementById('gm-action-inbox');
   const resolution = document.getElementById('gm-resolution');
+  // While the host plays, nobody sees the night's actions
+  if (game.hostMode) {
+    inbox.innerHTML = '';
+    resolution.innerHTML = '';
+    return;
+  }
   const thisRound = getRoundActions(game);
   const previewing = game.phase === 'night' || (game.phase === 'townhall' && game.townHallStage !== 'dawn');
   // Until dawn the preview below already lists every action
@@ -3033,7 +3143,7 @@ function renderGmVoting(game) {
   const scriptBox = document.getElementById('gm-script-box');
 
   scriptBox.innerHTML = game.gmScript
-    ? formatScript(game.gmScript)
+    ? formatScript(game.hostMode ? publicScript(game.gmScript) : game.gmScript)
     : 'No script yet — it is generated when you call Town Hall.';
 
   // The script is only needed while it's being read out
@@ -3233,6 +3343,8 @@ window.eliminatePlayerVote = async function(playerId) {
 };
 
 async function confirmPending(game) {
+  // While the host plays, they don't see who is still choosing
+  if (game.hostMode) return askConfirm('End the night and call everyone to Town Hall? Make sure everyone has finished.');
   const pending = pendingPlayers(game);
   const symbiote = pending.find(p => p.role === 'symbiote');
   return !pending.length || await askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.` +
@@ -3610,16 +3722,20 @@ function renderSurvivorReveal(game, me) {
 
   if (isSurvivor) {
     html += `<button class="btn btn-gold reveal-me" onclick="toggleIdentity()">Reveal Who I Am</button>`;
-  } else if (me) {
+  } else if (me || game.hostMode) {
     html += `<p class="text-mist" style="text-align:center">Survivors: ${esc(survivors.map(p => p.name).join(', '))}</p>`;
   } else {
-    // The GM already knows: call each survivor in turn, then show everyone the result
-    html += `<p class="text-mist text-small" style="margin-bottom:6px">Call each survivor in turn. They tap their phone and hold it up.</p><div class="cast-grid">` +
+    // A GM who isn't playing already knows who everyone is
+    html += `<div class="cast-grid">` +
       survivors.map(p => {
         const identity = identityOf(game, p);
         return `<div class="cast-row"><span class="cast-name">${esc(p.name)}</span><span class="cast-role">${identity.big}${identity.small ? ` · ${esc(identity.small)}` : ''}</span></div>`;
-      }).join('') + `</div>
-      <button class="btn btn-gold mt-16" onclick="showFinalResult()">Show the Result 🏆</button>`;
+      }).join('') + `</div>`;
+  }
+  // Whoever runs the game calls each survivor in turn, then shows everyone the result
+  if (state.isGM) {
+    html += `<p class="text-mist text-small mt-16">Call each survivor in turn. They tap their phone and hold it up.</p>
+      <button class="btn btn-gold mt-8" onclick="showFinalResult()">Show the Result 🏆</button>`;
   }
   document.getElementById('result-content').innerHTML = html;
   if (me) showIdentity(isSurvivor && state.identityShown, identityOf(game, me));
@@ -3638,7 +3754,7 @@ window.playAgain = async function() {
   getPlayerList(game).forEach(p => {
     players[p.id] = { name: p.name, eliminated: false, wounded: false, actionSubmitted: false, actionUsed: false, witchHeal: true, witchPoison: true };
   });
-  if (!await fbSet(`games/${state.roomCode}`, { phase: 'lobby', round: 0, createdAt: game.createdAt, players })) {
+  if (!await fbSet(`games/${state.roomCode}`, { phase: 'lobby', round: 0, createdAt: game.createdAt, players, ...(game.hostMode ? { hostMode: true } : {}) })) {
     toast(SAVE_FAILED, 4000);
     return;
   }
@@ -3680,10 +3796,12 @@ function renderPlayerPanel(game) {
   }
   const player = { ...p, id: gmPlayerId };
   const role = ROLES[p.role];
-  document.getElementById('gm-pp-title').textContent = `${role?.emoji || ''} ${p.name}`;
-  const sections = [`<div class="info-box">${esc(role?.name || p.role)} (${esc(TEAMS[teamOf(game, player)]?.reveal || '')})${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
+  const hidden = !!game.hostMode;
+  const showRole = !hidden || roleIsPublic(game, p);
+  document.getElementById('gm-pp-title').textContent = showRole ? `${role?.emoji || ''} ${p.name}` : p.name;
+  const sections = [`<div class="info-box">${showRole ? `${esc(role?.name || p.role)} (${esc(TEAMS[teamOf(game, player)]?.reveal || '')})` : 'Role hidden'}${p.eliminated ? ' · 👻 out of the game' : ''}</div>`];
 
-  if (game.phase === 'night' && !p.eliminated) sections.push(gmActionSection(game, player));
+  if (game.phase === 'night' && !p.eliminated) sections.push(hidden ? gmBlindResetSection(player) : gmActionSection(game, player));
   const stage = game.phase === 'townhall' ? townHallStage(game) : null;
   if ((stage === 'voting' || stage === 'reveal') && canVote(player, game)) sections.push(gmVoteSection(game, player));
   if ((stage === 'endvote' || stage === 'endreveal') && !p.eliminated) sections.push(gmEndVoteSection(game, player));
@@ -3692,6 +3810,12 @@ function renderPlayerPanel(game) {
   }
   if (sections.length === 1) sections.push(`<p class="text-mist text-small">Nothing to enter for ${esc(p.name)} right now.</p>`);
   document.getElementById('gm-pp-body').innerHTML = sections.join('');
+}
+
+// While the host plays, they can't see night choices, only clear one so the player can choose again
+function gmBlindResetSection(player) {
+  return `<p class="text-mist text-small" style="margin-bottom:8px">You can't see or enter night choices while you're playing. If ${esc(player.name)} needs to choose again, reset their choice.</p>
+    <button class="btn btn-secondary" onclick="clearPlayerAction()">Reset Their Night Choice</button>`;
 }
 
 function gmActionSection(game, player) {
@@ -3815,7 +3939,9 @@ window.resumeAsGm = async function() {
   if (!game) { toast('Room not found. Check the code.'); return; }
   if (!entered || entered !== gmCode(game)) { toast("That GM code doesn't match this room."); return; }
   const name = document.getElementById('playerName').value.trim() || 'Game Master';
-  Object.assign(state, { roomCode: code, playerId: 'GM', playerName: name, isGM: true, lastHash: null });
+  // A host who also plays takes their own seat back if they enter the same name
+  const seat = game.hostMode && getPlayerList(game).find(p => p.name.toLowerCase() === name.toLowerCase());
+  Object.assign(state, { roomCode: code, playerId: seat ? seat.id : 'GM', playerName: seat ? seat.name : name, isGM: true, lastHash: null });
   enterGame();
   toast(`You're now running room ${code}`);
 };

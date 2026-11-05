@@ -109,6 +109,7 @@
 <header>
   <h1>🐺 Test Bench</h1>
   <label>Players <input type="number" id="count" min="1" max="20" value="7"></label>
+  <label><input type="checkbox" id="host-plays"> GM plays too</label>
   <button class="primary" id="new-btn" onclick="newGame()">New Test Game</button>
   <button id="fill-btn" onclick="fillWaiting()" disabled>Random Choices for Everyone Waiting</button>
   <label>Size
@@ -207,9 +208,10 @@ async function newGame() {
     localStorage.removeItem(`${SESSION_KEY}-gm`);
     for (let i = 0; i < NAMES.length; i++) localStorage.removeItem(`${SESSION_KEY}-p${i}`);
 
-    const gm = await addSeat('gm', 'Game Master');
-    gm.frame.contentDocument.getElementById('playerName').value = 'Game Master';
-    await gm.frame.contentWindow.createGame();
+    const hostPlays = document.getElementById('host-plays').checked;
+    const gm = await addSeat('gm', hostPlays ? 'Host' : 'Game Master');
+    gm.frame.contentDocument.getElementById('playerName').value = hostPlays ? 'Host' : 'Game Master';
+    await gm.frame.contentWindow.createGame(hostPlays);
     const room = JSON.parse(localStorage.getItem(`${SESSION_KEY}-gm`) || '{}').roomCode;
     if (!room) throw new Error('The game could not be created.');
 
@@ -271,7 +273,9 @@ function actRandomly(seat) {
 }
 
 function fillWaiting() {
-  seats.filter(s => s.id !== 'gm' && visibleCards(s).length).forEach(actRandomly);
+  // A host who plays gets random choices too
+  const hostPlays = document.getElementById('host-plays').checked;
+  seats.filter(s => (s.id !== 'gm' || hostPlays) && visibleCards(s).length).forEach(actRandomly);
 }
 
 // Keeps each window's label in step with what that window is showing

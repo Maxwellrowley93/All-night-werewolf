@@ -7,7 +7,7 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 ## How to play
 
 ### 1. Set up
-1. The GM opens the app, enters their name and taps **Create New Game**. The GM's screen shows the room code, who has joined, and the role setup.
+1. The GM opens the app, enters their name and taps **Create Game (GM Only)**, or **Create Game (Play & Host)** to play as well (see [Play and Host](#play-and-host)). The GM's screen shows the room code, who has joined, and the role setup.
 2. Players open the app, enter their name and the room code, and tap **Join Game**. You can also share `…/All-night-werewolf/?room=ABCD` and the code is filled in for you.
 3. The GM chooses how many of each role to include, or taps **Simple** or **Advanced** under **Quick setup** to fill in a balanced line-up for the players who have joined (see [Suggested line-ups](#suggested-line-ups)), then adjusts it if they like. The role count must match the number of players and include at least one Werewolf. The Mayor, Bard, Scapegoat and Symbiote are limited to one each.
 4. The GM sets when **the Final** begins: by default when the number of players left equals the starting Werewolves + 2, adjustable with − and +.
@@ -117,6 +117,18 @@ Actions are worked out in this order. Steps 6 and 7 happen at dawn, after the vo
 6. **Attacks.** Each werewolf's kill (unless it now points at a Werewolf), then poison, then the Hunter's shot. Each protection cancels a single attack: a healing potion stops one wolf kill, and a Doctor's protection stops one wolf kill or poison. For example, two wolves against one Doctor means the target still dies. The Hunter's shot can't be stopped. A Tank who hasn't been hit before survives one hit that gets through, and two hits kill them.
 7. **Symbiote deaths.** If the host died, the Symbiote dies too.
 8. **Bard and Scapegoat.** Their effects are stored for the next Town Hall.
+
+## Play and Host
+
+With **Create Game (Play & Host)**, the person who creates the room also plays. They're dealt a role like everyone else, and their phone has two tabs:
+- **🃏 My Role:** exactly what every other player sees.
+- **🎛️ Host:** the controls that move the game on (End Night, Open the Floor, Eliminate, Go to Dawn, Begin the Final, Show the Result and so on).
+
+The Host tab never shows anything the rest of the table doesn't know. There's no Actions tab, living players' roles are hidden (a role appears once it's revealed on death, and the Mayor's is public), the Symbiote bond isn't marked, there's no "still waiting on" list at night, and the script leaves out the GM-only notes, with role reveals turned into lines to read out. In the Final's reveal, the host calls each survivor without seeing who they are.
+
+The host can still fix mistakes from a player's panel: enter or change a vote or an END/BANISH choice, bring back an eliminated player, or reset someone's night choice without seeing it. They can't enter a night action for someone, as that would show their role: a player whose phone dies rejoins on another phone with the same name and room code. During the Banish step, the host can tap their own blackboard to get back to the Host tab.
+
+If the host's phone dies, anyone can take over hosting with the GM code. Entering the host's own name as well brings back their seat in the game.
 
 ## If something goes wrong
 
