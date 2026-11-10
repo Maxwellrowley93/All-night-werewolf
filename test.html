@@ -252,18 +252,33 @@ function setPhone(value) {
   document.documentElement.style.setProperty('--phone-h', `${height}px`);
 }
 
-// Choices the window is currently offering, including any inside a role card that's still face down
+// Whether the window is offering this, including inside a role card that's still face down
+const showing = el => el.offsetParent !== null || el.closest('#playerActionArea')?.style.display === 'block';
+
+// Choices the window is currently offering
 function visibleCards(seat) {
   const doc = seat.frame.contentDocument;
   if (!doc) return [];
-  const showing = el => el.offsetParent !== null || el.closest('#playerActionArea')?.style.display === 'block';
   return [...doc.querySelectorAll('.action-card')].filter(showing);
 }
 
-// Taps a random choice and confirms it, through the game's own buttons
+// The Done for Tonight button, for a player with nothing to choose
+function doneButton(seat) {
+  const button = seat.frame.contentDocument?.querySelector('#playerActionArea .done-night-btn');
+  return button && showing(button) ? button : null;
+}
+
+function needsChoice(seat) {
+  return visibleCards(seat).length > 0 || !!doneButton(seat);
+}
+
+// Taps a random choice and confirms it, or taps Done, through the game's own buttons
 function actRandomly(seat) {
   const cards = visibleCards(seat);
-  if (!cards.length) return;
+  if (!cards.length) {
+    doneButton(seat)?.click();
+    return;
+  }
   const type = randomOf(cards).dataset.type;
   const ofType = cards.filter(c => c.dataset.type === type);
   new Set(ofType.map(c => c.dataset.slot)).forEach(slot => {
@@ -275,7 +290,7 @@ function actRandomly(seat) {
 function fillWaiting() {
   // A host who plays gets random choices too
   const hostPlays = document.getElementById('host-plays').checked;
-  seats.filter(s => (s.id !== 'gm' || hostPlays) && visibleCards(s).length).forEach(actRandomly);
+  seats.filter(s => (s.id !== 'gm' || hostPlays) && needsChoice(s)).forEach(actRandomly);
 }
 
 // Keeps each window's label in step with what that window is showing
@@ -287,13 +302,13 @@ function refreshLabels() {
     const role = doc.getElementById('playerRoleName')?.textContent || '';
     const inGame = doc.getElementById('screen-player-role')?.offsetParent !== null;
     const isGhost = inGame && doc.getElementById('playerGhostArea')?.style.display === 'block';
-    const needsChoice = visibleCards(seat).length > 0;
-    if (needsChoice) waiting++;
+    const waitingOn = needsChoice(seat);
+    if (waitingOn) waiting++;
     const over = doc.getElementById('screen-result')?.offsetParent !== null;
     seat.el.querySelector('.seat-role').textContent = over ? `${role} · game over` : inGame ? `${role}${isGhost ? ' · 👻 ghost' : ''}` : 'In the lobby';
-    seat.el.querySelector('button').style.display = needsChoice ? '' : 'none';
-    seat.el.classList.toggle('waiting', needsChoice);
-    seat.el.classList.toggle('ghost', isGhost && !needsChoice);
+    seat.el.querySelector('button').style.display = waitingOn ? '' : 'none';
+    seat.el.classList.toggle('waiting', waitingOn);
+    seat.el.classList.toggle('ghost', isGhost && !waitingOn);
   });
   document.getElementById('fill-btn').disabled = !waiting;
 }

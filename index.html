@@ -413,6 +413,26 @@
   .role-card-shown .role-reveal-back { display: none; }
   .role-card-shown .role-reveal-front { display: block; }
 
+  /* On the face-down card at night: still to finish (pulsing), or done */
+  .night-call {
+    padding: 8px 14px;
+    border: 2px solid var(--gold);
+    border-radius: 10px;
+    background: rgba(201,168,76,0.12);
+    color: var(--moon);
+    font-size: 17px;
+    font-weight: 600;
+    animation: gather-pulse 1.6s ease-in-out infinite;
+  }
+  .night-call.done {
+    border: 1px solid rgba(100,180,100,0.4);
+    background: rgba(28,43,26,0.4);
+    color: #A8D8A8;
+    font-weight: normal;
+    font-style: italic;
+    animation: none;
+  }
+
   .toggle-row {
     display: flex;
     align-items: center;
@@ -649,6 +669,24 @@
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Shown when the phone hasn't heard from the game for a while. Above the blackboard, below a question. */
+  #connection-banner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2500;
+    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
+    background: var(--ember);
+    color: #FFF4E6;
+    font-size: calc(14px * var(--wide, 1));
+    line-height: 1.3;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  }
+  #connection-banner.show { display: block; }
 
   .vote-bar {
     height: 4px;
@@ -1267,6 +1305,8 @@
           <div class="eye-icon">🃏</div>
           <h3 style="color:var(--moon)">Your Role</h3>
           <p>Tap to see your role and action, tap again to hide<br>Make sure no one is watching</p>
+          <!-- At night: whether this player has finished. Everyone has to, so it says nothing about their role. -->
+          <div class="night-call" id="nightCall" style="display:none"></div>
         </div>
         <div class="role-reveal-front" id="roleCardFront">
           <div class="role-name" id="playerRoleName"></div>
@@ -1428,6 +1468,8 @@
 
 <div class="toast" id="toast"></div>
 
+<div id="connection-banner" role="status">📡 Connection lost, so this screen may be out of date. Reconnecting…</div>
+
 <div id="slate-screen" onclick="slateTapped()"></div>
 
 <!-- The Final's reveal: a survivor's team, full screen, to hold up -->
@@ -1468,63 +1510,113 @@ let state = {
   cardShown: false,
   identityShown: false,
   phaseKey: null,
+  saves: 0,         // how many times this phone has saved, so a reply sent before a save isn't shown after it
+  saving: 0,        // saves on their way, during which replies aren't shown (they could put the old choices back)
+  lastContact: 0,   // when this phone last heard from the game
+  waitingCount: null, // how many players the GM was waiting on at the last check
 };
 
 // ============================================================
 // FIREBASE REST HELPERS
 // ============================================================
 
+// A request with no answer by now counts as failed, so a weak signal never leaves a phone waiting forever
+const REQUEST_TIMEOUT = 8000;
+const OFFLINE_TEXT = "Can't reach the game. Check your connection and try again.";
+
+// One request to the database. Returns { ok: true, data } when the server answers (data is null if there's
+// nothing at that path), or { ok: false } when it can't be reached or turns the request down.
+async function fbRequest(path, method = 'GET', body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  try {
+    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
+      method,
+      cache: 'no-store',
+      signal: controller.signal,
+      ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    });
+    // 4xx means the database rules turned it down, so sending it again won't help (except when it's busy)
+    if (!r.ok) return { ok: false, refused: r.status < 500 && r.status !== 429 };
+    return { ok: true, data: await r.json() };
+  } catch(e) {
+    return { ok: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fbGet(path) {
-  try {
-    const r = await fetch(`${FIREBASE_URL}/${path}.json`);
-    if (!r.ok) throw new Error('fetch failed');
-    return await r.json();
-  } catch(e) { return null; }
+  const r = await fbRequest(path);
+  return r.ok ? r.data : null;
 }
 
-async function fbSet(path, data) {
-  try {
-    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!r.ok) throw new Error('save refused');
-    return (await r.json()) ?? true;
-  } catch(e) { return null; }
+// Writes are tried three times, since a phone on a weak signal often fails once and then gets through.
+// Every write in the game sets values rather than adding to them, so one that arrives twice does no harm.
+async function fbWrite(method, path, data) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const r = await fbRequest(path, method, data);
+    if (r.ok) return true;
+    if (r.refused) return false;
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+  }
+  return false;
 }
-
-async function fbUpdate(path, data) {
-  try {
-    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!r.ok) throw new Error('save refused');
-    return (await r.json()) ?? true;
-  } catch(e) { return null; }
-}
-
-async function fbPush(path, data) {
-  try {
-    const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!r.ok) throw new Error('save refused');
-    return (await r.json()) ?? true;
-  } catch(e) { return null; }
-}
+const fbSet = (path, data) => fbWrite('PUT', path, data);
+const fbUpdate = (path, data) => fbWrite('PATCH', path, data);
 
 // Saves to the current game, or tells whoever is holding the phone that it didn't save,
-// so a choice is never silently lost
+// so a choice is never silently lost. Once saved, the change shows on this phone straight away.
 const SAVE_FAILED = "Didn't save. Check your connection and try again.";
 async function saveGame(updates) {
+  // A slow save says so, rather than leaving the button looking dead
+  let slow = false;
+  const slowTimer = setTimeout(() => { slow = true; toast('Saving… the connection is slow', REQUEST_TIMEOUT * 3); }, 1500);
+  state.saving++;
   const ok = await fbUpdate(`games/${state.roomCode}`, updates);
-  if (!ok) toast(SAVE_FAILED, 4000);
-  return !!ok;
+  state.saving--;
+  clearTimeout(slowTimer);
+  if (!ok) {
+    toast(SAVE_FAILED, 5000);
+    return false;
+  }
+  if (slow) toast('Saved', 1500);
+  showSaved(updates);
+  return true;
+}
+
+// Puts a saved change into this phone's copy of the game and redraws it. Without this the screen waits
+// for the next check of the game, and on a weak signal that can fail, leaving the old choices on screen.
+function showSaved(updates) {
+  const game = state.gameData;
+  if (!game) return;
+  Object.entries(updates).forEach(([path, value]) => {
+    const keys = path.split('/');
+    const last = keys.pop();
+    let node = game;
+    for (const key of keys) {
+      if (typeof node[key] !== 'object' || node[key] === null) {
+        if (value === null) return;
+        node[key] = {};
+      }
+      node = node[key];
+    }
+    if (value === null || value === undefined) delete node[last];
+    else node[last] = JSON.parse(JSON.stringify(value));
+  });
+  // Any check of the game already on its way left before this save, so its reply is out of date
+  state.saves++;
+  state.lastHash = null;
+  showGame(game);
+}
+
+// The game as the server has it right now, for a GM step that mustn't act on an old copy.
+// Says so if the server can't be reached, so a tap never silently does nothing.
+async function loadGame() {
+  const r = await fbRequest(`games/${state.roomCode}`);
+  if (r.ok) return r.data;
+  toast(OFFLINE_TEXT, 4000);
+  return null;
 }
 
 // ============================================================
@@ -1808,8 +1900,20 @@ function getGhosts(game) {
   return getPlayerList(game).filter(p => p.eliminated);
 }
 
+// Tonight's choices, one per player. Each choice is saved under one key per player per night (actionKey),
+// so sending it again replaces it. A copy of the app from before that could save a choice twice:
+// if that happens, only the latest one counts.
 function getRoundActions(game) {
-  return Object.values(game.actions || {}).filter(a => a && a.round === game.round);
+  const latest = {};
+  Object.values(game.actions || {}).forEach(a => {
+    if (!a || a.round !== game.round) return;
+    if (!latest[a.fromId] || a.timestamp >= latest[a.fromId].timestamp) latest[a.fromId] = a;
+  });
+  return Object.values(latest);
+}
+
+function actionKey(round, playerId) {
+  return `r${round}-${playerId}`;
 }
 
 // Asks a yes/no question inside the page. Browser pop-ups can be silently blocked, which would leave the button dead.
@@ -1943,9 +2047,10 @@ function abilitySpent(p, game) {
   }
 }
 
-// Living players who could still act tonight but haven't
+// Living players who haven't finished tonight. Everyone finishes the night, with a choice or by tapping
+// Done, so this list gives no hint of who has an ability, and a phone that never showed the night stands out.
 function pendingPlayers(game) {
-  return getLivingPlayers(game).filter(p => ROLES[p.role]?.hasAction && !p.actionSubmitted && !abilitySpent(p, game));
+  return getLivingPlayers(game).filter(p => !p.actionSubmitted).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ============================================================
@@ -1993,8 +2098,15 @@ function enterGame() {
 async function restoreSession() {
   const saved = loadSession();
   if (!saved?.roomCode) return;
-  const game = await fbGet(`games/${saved.roomCode}`);
-  if (game && (saved.isGM || game.players?.[saved.playerId])) {
+  const r = await fbRequest(`games/${saved.roomCode}`);
+  const game = r.data;
+  if (!r.ok) {
+    // No connection yet: go back into the game anyway. It says the connection is lost and catches up once it's back.
+    Object.assign(state, saved);
+    enterGame();
+    state.lastContact = 0;
+    updateConnectionBanner();
+  } else if (game && (saved.isGM || game.players?.[saved.playerId])) {
     Object.assign(state, saved);
     enterGame();
   } else {
@@ -2064,7 +2176,9 @@ window.joinGame = async function() {
   if (!name) { toast('Enter your name'); return; }
   if (code.length !== 4) { toast('Enter a 4-letter room code'); return; }
 
-  const game = await fbGet(`games/${code}`);
+  const r = await fbRequest(`games/${code}`);
+  if (!r.ok) { toast(OFFLINE_TEXT, 4000); return; }
+  const game = r.data;
   if (!game) { toast('Room not found. Check the code.'); return; }
 
   let playerId;
@@ -2097,22 +2211,62 @@ window.joinGame = async function() {
 };
 
 // ============================================================
-// POLLING (lightweight — checks for changes every 2s)
+// POLLING — checks the game every 2 seconds, and straight away when the phone wakes up or reconnects
 // ============================================================
+
+let pollInFlight = false;
+let pollQueued = false;
 
 function startPolling() {
   if (state.pollInterval) clearInterval(state.pollInterval);
+  state.lastContact = Date.now();
   state.pollInterval = setInterval(pollGame, 2000);
   pollGame();
 }
 
 async function pollGame() {
   if (!state.roomCode) return;
-  const game = await fbGet(`games/${state.roomCode}`);
-  if (!game) return;
-  const hash = JSON.stringify(game);
-  if (hash === state.lastHash) return;
-  state.lastHash = hash;
+  // One check at a time. On a slow connection, replies to overlapping checks can arrive out of order,
+  // and an old reply would put a night that's over, or a choice that's been made, back on screen.
+  if (pollInFlight) {
+    pollQueued = true;
+    return;
+  }
+  pollInFlight = true;
+  const room = state.roomCode;
+  const saves = state.saves;
+  const r = await fbRequest(`games/${room}`);
+  pollInFlight = false;
+
+  const current = room === state.roomCode;
+  // A reply that left before this phone's latest save may not include it, so it isn't shown, and nor is
+  // one that arrives while a save is on its way. The save shows itself once it's through.
+  const stale = state.saves !== saves;
+  if (current && r.ok) state.lastContact = Date.now();
+  updateConnectionBanner();
+  if (current && r.ok && r.data && !stale && !state.saving) {
+    const hash = JSON.stringify(r.data);
+    if (hash !== state.lastHash) {
+      state.lastHash = hash;
+      showGame(r.data);
+    }
+  }
+  if (pollQueued || (current && stale)) {
+    pollQueued = false;
+    pollGame();
+  }
+}
+
+// A phone that hasn't heard from the game for this long says so, so nobody trusts a screen that's out of date
+const OFFLINE_AFTER = 7000;
+function updateConnectionBanner() {
+  const lost = !!state.roomCode && Date.now() - state.lastContact > OFFLINE_AFTER;
+  document.getElementById('connection-banner').classList.toggle('show', lost);
+}
+setInterval(updateConnectionBanner, 1000);
+
+// Draws the game as it now stands
+function showGame(game) {
   state.gameData = game;
 
   // New night or Town Hall — forget any half-made selection from before
@@ -2122,8 +2276,20 @@ async function pollGame() {
     state.phaseKey = phaseKey;
     pendingAction = { type: null };
     hideRoleCard();
-    if (inTownHall && !state.isGM) navigator.vibrate?.(300);
+    if ((inTownHall || game.phase === 'night') && !state.isGM) navigator.vibrate?.(300);
     if (game.phase === 'ended' && !state.isGM) navigator.vibrate?.([200, 100, 200]);
+  }
+
+  // The GM hears when the last player finishes the night, so they know they can call Town Hall
+  if (state.isGM && game.phase === 'night') {
+    const waiting = pendingPlayers(game).length;
+    if (!waiting && state.waitingCount) {
+      toast("Everyone's done. Call Town Hall when you're ready 🔔", 5000);
+      navigator.vibrate?.(200);
+    }
+    state.waitingCount = waiting;
+  } else {
+    state.waitingCount = null;
   }
 
   if (isPlayingHost(game)) {
@@ -2295,6 +2461,16 @@ function renderPlayer(game) {
   townHallArea.style.display = game.phase === 'townhall' ? 'block' : 'none';
   if (game.phase === 'townhall') renderTownHallArea(game, me);
 
+  // The face-down card says whether this player has finished tonight, so a choice that wasn't confirmed
+  // or didn't save can't go unnoticed
+  const call = document.getElementById('nightCall');
+  const tonight = game.phase === 'night' && !me.eliminated;
+  call.style.display = tonight ? '' : 'none';
+  if (tonight) {
+    call.classList.toggle('done', !!me.actionSubmitted);
+    call.textContent = me.actionSubmitted ? "✓ You're done for tonight" : '🌙 Tap your card to finish tonight';
+  }
+
   // Ghost
   if (me.eliminated) {
     ghostArea.style.display = 'block';
@@ -2338,22 +2514,39 @@ const SPENT_TEXT = {
 // Roles whose ability is optional each night get a "Not tonight" button
 const OPTIONAL_ACTION_ROLES = ['hunter', 'bard', 'scapegoat', 'witch'];
 
+// Everyone finishes the night, with a choice or with this button. Then the GM can see whose phone hasn't
+// caught up, and nobody can tell who has an ability from who is tapping.
+const DONE_BUTTON = `<button class="btn btn-primary mt-16 done-night-btn" onclick="skipAction()">Done for Tonight</button>`;
+
 function renderPlayerAction(game, me) {
   const content = document.getElementById('playerActionContent');
 
-  if (!ROLES[me.role]?.hasAction) {
-    content.innerHTML = `<p class="text-mist text-small">No action tonight.</p>`;
+  if (me.actionSubmitted) {
+    content.innerHTML = `<div class="submitted-banner">✓ You're done for tonight.${esc(myChoiceText(game, me))}</div>`;
     return;
   }
-  if (me.actionSubmitted) {
-    content.innerHTML = `<div class="submitted-banner">✓ You're done for tonight.</div>`;
+  if (!ROLES[me.role]?.hasAction) {
+    content.innerHTML = `<p class="text-mist text-small">No action tonight. Tap Done when you're ready.</p>${DONE_BUTTON}`;
     return;
   }
   if (abilitySpent(me, game)) {
-    content.innerHTML = `<div class="submitted-banner">${SPENT_TEXT[me.role]}</div>`;
+    content.innerHTML = `<div class="submitted-banner">${SPENT_TEXT[me.role]}</div>${DONE_BUTTON}`;
     return;
   }
   content.innerHTML = buildActionChoices(game, { ...me, id: state.playerId });
+}
+
+// Tonight's saved choice in the player's own words, so they can see it went through
+const CHOICE_WORDS = {
+  kill: 'attack', inspect: 'inspect', protect: 'protect', heal: 'heal', poison: 'poison', shoot: 'shoot',
+  distract: 'distract', control: 'control', double: 'double the vote of', redirect: 'take the votes against', bond: 'bond with'
+};
+function myChoiceText(game, me) {
+  const a = getRoundActions(game).find(x => x.fromId === me.id);
+  if (!a) return '';
+  const target = a.targetId === me.id ? 'yourself' : a.targetName;
+  const redirect = a.type === 'control' ? `, sending their action to ${a.redirectId === me.id ? 'you' : a.redirectName}` : '';
+  return ` You chose to ${CHOICE_WORDS[a.type] || a.type} ${target}${redirect}.`;
 }
 
 // The targets and buttons for one player's night action. The GM uses this too, to act for a player.
@@ -2404,7 +2597,7 @@ function buildActionChoices(game, actor) {
   }
 
   if (OPTIONAL_ACTION_ROLES.includes(actor.role)) {
-    html += `<button class="btn btn-secondary" onclick="skipAction()">Not tonight</button>`;
+    html += `<button class="btn btn-secondary done-night-btn" onclick="skipAction()">Not tonight</button>`;
   }
   return html;
 }
@@ -2479,22 +2672,53 @@ function actorId() {
 // After a choice is saved: the GM stays on that player's panel, a player's card turns face down
 function afterChoiceSaved(message) {
   pendingAction = { type: null };
+  const game = state.gameData;
+  const allDone = state.isGM && game?.phase === 'night' && !pendingPlayers(game).length;
+  const done = allDone ? ". Everyone's done, so call Town Hall when you're ready 🔔" : '';
   if (gmPlayerId) {
-    toast(`${message} for ${state.gameData.players[gmPlayerId]?.name}`);
+    toast(`${message} for ${game.players[gmPlayerId]?.name}${done}`, allDone ? 5000 : 3000);
   } else {
     hideRoleCard();
     fitScreen();
-    toast(message);
+    toast(`${message}${done}`, allDone ? 5000 : 3000);
   }
   pollGame();
+}
+
+// A phone that hasn't heard from the game for a few seconds may be showing a night that's already over.
+// It checks before saving a night choice, as one saved late would mark the player done for the wrong night.
+async function stillTonight(round) {
+  if (Date.now() - state.lastContact < 4000) return true;
+  const r = await fbRequest(`games/${state.roomCode}`);
+  if (!r.ok || !r.data) {
+    toast(SAVE_FAILED, 5000);
+    return false;
+  }
+  state.lastContact = Date.now();
+  updateConnectionBanner();
+  if (r.data.phase === 'night' && r.data.round === round) return true;
+  state.lastHash = JSON.stringify(r.data);
+  showGame(r.data);
+  toast("That night is already over, so the choice wasn't saved.", 5000);
+  return false;
+}
+
+// While a choice saves, its buttons say so and can't be tapped again
+function setSaving(selector, saving) {
+  document.querySelectorAll(selector).forEach(b => {
+    b.disabled = saving || (b.classList.contains('confirm-action-btn') && !canConfirm(b.dataset.type));
+    if (saving) b.dataset.label ??= b.textContent;
+    b.textContent = saving ? 'Saving…' : b.dataset.label ?? b.textContent;
+  });
 }
 
 window.confirmAction = async function() {
   const a = pendingAction;
   if (!canConfirm(a.type)) return;
-  document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = true; });
-
   const id = actorId();
+  const round = state.gameData.round;
+  setSaving('.confirm-action-btn', true);
+
   const player = state.gameData.players[id];
   const action = {
     fromId: id,
@@ -2503,7 +2727,7 @@ window.confirmAction = async function() {
     type: a.type,
     targetId: a.targetId,
     targetName: a.targetName,
-    round: state.gameData.round,
+    round,
     timestamp: Date.now()
   };
   if (a.type === 'control') {
@@ -2511,17 +2735,26 @@ window.confirmAction = async function() {
     action.redirectName = a.redirectName;
   }
 
-  // The action and the "done" mark save together, so neither can be saved without the other
-  const key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  if (!await saveGame({ [`actions/${key}`]: action, [`players/${id}/actionSubmitted`]: true })) {
-    document.querySelectorAll('.confirm-action-btn').forEach(b => { b.disabled = !canConfirm(b.dataset.type); });
+  // The action and the "done" mark save together, so neither can be saved without the other.
+  // The key is the same each time this player saves tonight, so a choice sent twice still counts once.
+  const saved = await stillTonight(round) &&
+    await saveGame({ [`actions/${actionKey(round, id)}`]: action, [`players/${id}/actionSubmitted`]: true });
+  if (!saved) {
+    setSaving('.confirm-action-btn', false);
     return;
   }
   afterChoiceSaved('Saved');
 };
 
+// "Done for Tonight", "Not tonight", or the GM marking a player done
 window.skipAction = async function() {
-  if (!await saveGame({ [`players/${actorId()}/actionSubmitted`]: true })) return;
+  const round = state.gameData.round;
+  setSaving('.done-night-btn', true);
+  const saved = await stillTonight(round) && await saveGame({ [`players/${actorId()}/actionSubmitted`]: true });
+  if (!saved) {
+    setSaving('.done-night-btn', false);
+    return;
+  }
   afterChoiceSaved('Saved');
 };
 
@@ -2717,10 +2950,19 @@ window.toggleRoleCard = function() {
   fitScreen();
 };
 
-// Auto-hide on visibility change
+// The card hides when the phone is put away. A phone that comes back checks the game at once: while the
+// screen was off it may have stopped checking, and what it shows could be out of date.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) hideRoleCard();
+  if (document.hidden) {
+    hideRoleCard();
+    return;
+  }
+  // A moment's grace, so "Connection lost" doesn't flash up while that first check is on its way
+  state.lastContact = Math.max(state.lastContact, Date.now() - OFFLINE_AFTER + 3000);
+  pollGame();
 });
+window.addEventListener('online', () => pollGame());
+window.addEventListener('pageshow', e => { if (e.persisted) pollGame(); });
 
 // ============================================================
 // NIGHT RESOLUTION
@@ -3019,12 +3261,14 @@ function renderGmPhaseControls(game) {
   if (game.phase === 'lobby') {
     html = '';
   } else if (game.phase === 'night') {
+    // Everyone finishes the night, abilities or not, so even the playing host can see these names
     const pending = pendingPlayers(game);
-    const actionCount = getRoundActions(game).length;
+    const received = game.hostMode ? '' : `${getRoundActions(game).length} action(s) received. `;
+    const waiting = pending.length
+      ? `Still waiting on: <strong>${esc(pending.map(p => p.name).join(', '))}</strong>. If someone's phone isn't showing the night, ask them to reload the page.`
+      : "Everyone's done.";
     html = `
-      <div class="info-box">${game.hostMode
-        ? 'When everyone has finished, call Town Hall.'
-        : `${actionCount} action(s) received. ${pending.length ? `Still waiting on: ${esc(pending.map(p => p.name).join(', '))}.` : 'Everyone with an ability is done.'}`}</div>
+      <div class="info-box${pending.length ? '' : ' success'}">${received}${waiting}</div>
       <button class="btn btn-gold" onclick="advanceToTownHall()">End Night → Call Everyone to Town Hall 🔔</button>
     `;
   } else if (game.phase === 'townhall') {
@@ -3266,7 +3510,7 @@ window.openVoting = async function() {
 };
 
 window.closeVoting = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game) return;
   const missing = getVoters(game).filter(p => !game.votes?.[p.id]);
   if (missing.length && !await askConfirm(`Still waiting on: ${missing.map(p => p.name).join(', ')}.\n\nClose voting anyway?`)) return;
@@ -3275,7 +3519,7 @@ window.closeVoting = async function() {
 };
 
 window.startTiebreak = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game) return;
   if (!await saveGame({
     townHallStage: 'voting',
@@ -3287,17 +3531,17 @@ window.startTiebreak = async function() {
 };
 
 async function endGameIfWon() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase === 'ended') return;
   const winner = checkWinCondition(game);
   // Before the Final, attacks still to land could change who has the numbers, so wolves can only win once they have
   if (winner === 'wolf' && !game.final && game.phase === 'townhall' && game.townHallStage !== 'dawn') return;
   // A Final that ends this way still finishes with the survivors' reveal
-  if (winner) await fbUpdate(`games/${state.roomCode}`, { phase: 'ended', winner, ...(game.final ? { finalReveal: true } : {}) });
+  if (winner) await saveGame({ phase: 'ended', winner, ...(game.final ? { finalReveal: true } : {}) });
 }
 
 async function eliminate(playerId, extraUpdates = {}) {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   const player = game?.players?.[playerId];
   if (!player || player.eliminated) return;
 
@@ -3330,7 +3574,7 @@ window.eliminatePlayer = async function(playerId) {
 };
 
 window.eliminatePlayerVote = async function(playerId) {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   const player = game?.players?.[playerId];
   if (!player || !await askConfirm(`Eliminate ${player.name} by village vote?`)) return;
 
@@ -3343,13 +3587,14 @@ window.eliminatePlayerVote = async function(playerId) {
 };
 
 async function confirmPending(game) {
-  // While the host plays, they don't see who is still choosing
-  if (game.hostMode) return askConfirm('End the night and call everyone to Town Hall? Make sure everyone has finished.');
   const pending = pendingPlayers(game);
-  const symbiote = pending.find(p => p.role === 'symbiote');
-  return !pending.length || await askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.` +
-    (symbiote ? `\n\n${symbiote.name} (Symbiote) will be bonded to someone at random.` : '') +
-    `\n\nEnd the night anyway?`);
+  if (!pending.length) return true;
+  // While the host plays, the Symbiote isn't named, as that would give their role away
+  const symbiote = !game.hostMode && unbondedSymbiote(game);
+  const symbioteWaiting = symbiote && pending.some(p => p.id === symbiote.id);
+  return askConfirm(`Still waiting on: ${pending.map(p => p.name).join(', ')}.` +
+    (symbioteWaiting ? `\n\n${symbiote.name} (Symbiote) will be bonded to someone at random.` : '') +
+    `\n\nAnyone who hasn't finished loses tonight's action. End the night anyway?`);
 }
 
 // The living Symbiote who still needs a host, if there is one
@@ -3367,7 +3612,7 @@ function nextNightUpdates(game, updates) {
 }
 
 window.advanceToTownHall = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'night' || !await confirmPending(game)) return;
 
   const { updates, gatherNotes } = resolveNight(game, getRoundActions(game), getPlayerList(game));
@@ -3415,7 +3660,7 @@ function buildTownHallScript(game, updates, notes) {
 }
 
 window.advanceToDawn = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'townhall') return;
 
   // Moving on without carrying out a decisive vote is allowed, but shouldn't happen by accident
@@ -3450,7 +3695,7 @@ function gameOverReason(game) {
 }
 
 window.advanceToNight = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'townhall') return;
 
   const updates = nextNightUpdates(game, {
@@ -3483,7 +3728,7 @@ function finalScript(game) {
 }
 
 window.beginFinal = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'townhall') return;
   if (!finalDue(game) && !await askConfirm('Begin the Final early? There will be no more nights: only votes from now on.')) return;
   if (!await saveGame({
@@ -3509,7 +3754,7 @@ window.openEndVote = async function() {
 };
 
 window.closeEndVote = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game) return;
   const missing = getLivingPlayers(game).filter(p => !game.endVotes?.[p.id]);
   if (missing.length && !await askConfirm(`Still waiting on: ${missing.map(p => p.name).join(', ')}.\n\nClose the vote anyway? Anyone who hasn't chosen doesn't count towards ending the game.`)) return;
@@ -3518,7 +3763,7 @@ window.closeEndVote = async function() {
 };
 
 window.nextFinalRound = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'townhall') return;
   const { leaders } = tallyVotes(game);
   if (!game.votedOut && leaders.length === 1 && !await askConfirm(`${leaders[0].name} leads the vote but hasn't been banished.\n\nMove on anyway?`)) return;
@@ -3536,7 +3781,7 @@ window.nextFinalRound = async function() {
 
 // The Final ends with whoever is still standing: any Werewolf among them means the wolves win
 async function finishFinal() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase === 'ended') return;
   const winner = getLivingPlayers(game).some(isWerewolf) ? 'wolf' : 'village';
   if (!await saveGame({ phase: 'ended', winner, finalReveal: true })) return;
@@ -3596,7 +3841,7 @@ setInterval(renderTimers, 1000);
 
 // Gives everyone another minute, starting from now if time has already run out
 window.addTimerMinute = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || game.phase !== 'night') return;
   if (!await saveGame({ timerEndsAt: Math.max(Date.now(), game.timerEndsAt || 0) + 60000 })) return;
   pollGame();
@@ -3748,7 +3993,7 @@ window.showFinalResult = async function() {
 
 // A fresh game in the same room: everyone keeps their place and the GM code stays the same
 window.playAgain = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game || !await askConfirm('Start a new game with the same players? Roles will be dealt again.')) return;
   const players = {};
   getPlayerList(game).forEach(p => {
@@ -3820,13 +4065,18 @@ function gmBlindResetSection(player) {
 
 function gmActionSection(game, player) {
   const name = esc(player.name);
-  if (!ROLES[player.role]?.hasAction) return `<p class="text-mist text-small">${name} has no night action.</p>`;
+  const hasAbility = ROLES[player.role]?.hasAction && !abilitySpent(player, game);
   if (player.actionSubmitted) {
     const chosen = getRoundActions(game).filter(a => a.fromId === player.id).map(a => esc(actionDescription(a)));
-    return `<div class="submitted-banner">✓ ${name} is done for tonight: ${chosen.length ? chosen.join('; ') : 'chose not to act'}.</div>
+    const what = chosen.length ? `: ${chosen.join('; ')}` : hasAbility ? ': chose not to act' : '';
+    return `<div class="submitted-banner">✓ ${name} is done for tonight${what}.</div>
       <button class="btn btn-secondary mt-8" onclick="clearPlayerAction()">Clear So It Can Be Redone</button>`;
   }
-  if (abilitySpent(player, game)) return `<div class="submitted-banner">${name}'s ability is used up.</div>`;
+  if (!hasAbility) {
+    const why = ROLES[player.role]?.hasAction ? "'s ability is used up" : ' has no night action';
+    return `<p class="text-mist text-small" style="margin-bottom:8px">${name}${why}, but hasn't tapped Done. If their phone isn't working, mark them as done.</p>
+      <button class="btn btn-secondary done-night-btn" onclick="skipAction()">Mark ${name} as Done</button>`;
+  }
   return `<p class="text-mist text-small" style="margin-bottom:8px">Enter ${name}'s action:</p>` + buildActionChoices(game, player);
 }
 
@@ -3890,7 +4140,7 @@ function gmEndVoteSection(game, player) {
 }
 
 window.clearPlayerAction = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   const player = game?.players?.[gmPlayerId];
   if (!player || game.phase !== 'night') return;
   const updates = { [`players/${gmPlayerId}/actionSubmitted`]: false };
@@ -3903,7 +4153,7 @@ window.clearPlayerAction = async function() {
 };
 
 window.clearPlayerVote = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   const player = game?.players?.[gmPlayerId];
   if (!player || game.phase !== 'townhall' || townHallStage(game) !== 'voting') return;
   const updates = { [`votes/${gmPlayerId}`]: null };
@@ -3915,7 +4165,7 @@ window.clearPlayerVote = async function() {
 };
 
 window.revivePlayer = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   const player = game?.players?.[gmPlayerId];
   if (!player?.eliminated || !await askConfirm(`Bring ${player.name} back into the game? Only do this to undo a mistake.`)) return;
   const updates = { [`players/${gmPlayerId}/eliminated`]: false, [`finalOut/${gmPlayerId}`]: null };
@@ -3935,7 +4185,9 @@ window.resumeAsGm = async function() {
   const code = document.getElementById('joinCode').value.trim().toUpperCase();
   const entered = document.getElementById('gmCodeInput').value.trim();
   if (code.length !== 4) { toast('Enter the 4-letter room code above'); return; }
-  const game = await fbGet(`games/${code}`);
+  const r = await fbRequest(`games/${code}`);
+  if (!r.ok) { toast(OFFLINE_TEXT, 4000); return; }
+  const game = r.data;
   if (!game) { toast('Room not found. Check the code.'); return; }
   if (!entered || entered !== gmCode(game)) { toast("That GM code doesn't match this room."); return; }
   const name = document.getElementById('playerName').value.trim() || 'Game Master';
@@ -4109,7 +4361,7 @@ function updateRoleTotal() {
 }
 
 window.assignRolesAndStart = async function() {
-  const game = await fbGet(`games/${state.roomCode}`);
+  const game = await loadGame();
   if (!game) return;
   if (game.phase !== 'lobby') { toast('The game has already started'); return; }
 

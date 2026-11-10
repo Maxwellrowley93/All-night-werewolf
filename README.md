@@ -20,9 +20,10 @@ A phone-based companion app for playing Werewolf in person. One person runs the 
 - The card says which team the player is on: Villager team, Werewolf team, or, for the Jester, no team. When a role is revealed, the GM's script gives the team too.
 - Werewolves see the rest of their pack on the card.
 - Players with a night ability choose a target on the card and confirm. Abilities that can only be used once per game also have a **Not tonight** button.
+- **Everyone finishes the night**, ability or not: players with nothing to choose tap **Done for Tonight**. Until they've finished, the face-down card says "🌙 Tap your card to finish tonight", and then "✓ You're done for tonight". Inside the card, a player sees the choice that was saved ("You chose to protect Priya"). Every phone buzzes when a night starts, on phones that can.
 - Everyone mingles, schemes and bluffs. If the night timer is on, every phone counts down to Town Hall ("⏳ 3:42 until Town Hall") and buzzes at "⏰ Time to gather!". The timer only informs: the night ends when the GM taps End Night, and the GM can tap **+1 min** to give everyone longer.
 - On the **Actions** tab, the GM sees every action as it comes in, a step-by-step preview of how the night will play out, and the script that will be read.
-- On the **Players** tab, the GM taps **End Night → Call Everyone to Town Hall** once everyone has acted. If anyone hasn't, the app warns the GM first. Every phone then tells its player to gather.
+- On the **Players** tab, the GM sees who the night is still waiting on, by name, and their phone buzzes once everyone's done. The GM then taps **End Night → Call Everyone to Town Hall**. If anyone hasn't finished, the app names them and asks first. Every phone then tells its player to gather.
 
 Nobody dies yet. When the night ends, the Seer gets their result and any Bard, Scapegoat or Symbiote effect starts. Attacks land at dawn, after the vote.
 
@@ -124,7 +125,7 @@ With **Create Game (Play & Host)**, the person who creates the room also plays. 
 - **🃏 My Role:** exactly what every other player sees.
 - **🎛️ Host:** the controls that move the game on (End Night, Open the Floor, Eliminate, Go to Dawn, Begin the Final, Show the Result and so on).
 
-The Host tab never shows anything the rest of the table doesn't know. There's no Actions tab, living players' roles are hidden (a role appears once it's revealed on death, and the Mayor's is public), the Symbiote bond isn't marked, there's no "still waiting on" list at night, and the script leaves out the GM-only notes, with role reveals turned into lines to read out. In the Final's reveal, the host calls each survivor without seeing who they are.
+The Host tab never shows anything the rest of the table doesn't know. There's no Actions tab, living players' roles are hidden (a role appears once it's revealed on death, and the Mayor's is public), the Symbiote bond isn't marked, and the script leaves out the GM-only notes, with role reveals turned into lines to read out. In the Final's reveal, the host calls each survivor without seeing who they are. The host does see who the night is still waiting on. That gives nothing away, because everyone has to finish the night, ability or not.
 
 The host can still fix mistakes from a player's panel: enter or change a vote or an END/BANISH choice, bring back an eliminated player, or reset someone's night choice without seeing it. They can't enter a night action for someone, as that would show their role: a player whose phone dies rejoins on another phone with the same name and room code. During the Banish step, the host can tap their own blackboard to get back to the Host tab.
 
@@ -132,11 +133,13 @@ If the host's phone dies, anyone can take over hosting with the GM code. Enterin
 
 ## If something goes wrong
 
-- **A phone dies or a player taps the wrong name.** On the **Players** tab, the GM taps that player to open their panel. At night the GM can enter their action, with the same choices their phone shows, or clear one so it can be redone. During voting the GM can enter their vote, save a ghost's final vote, change a vote, or clear one so it can be cast again. While voting is open the GM sees whether someone has voted, not who for.
+- **A phone dies or a player taps the wrong name.** On the **Players** tab, the GM taps that player to open their panel. At night the GM can enter their action, with the same choices their phone shows, mark a player with nothing to choose as done, or clear a choice so it can be redone. During voting the GM can enter their vote, save a ghost's final vote, change a vote, or clear one so it can be cast again. While voting is open the GM sees whether someone has voted, not who for.
 - **A vote is wrong at the reveal.** On the **Town Hall** tab, tap that player's blackboard (or tap them on the Players tab). The GM sees their vote and can change it, or switch a ghost's vote to saved. The tally and the player's blackboard update straight away. If someone has already been eliminated and the change alters the result, bring them back from their panel.
 - **The GM eliminates the wrong player.** Tap that player and choose **Bring Back (Undo Elimination)**. This can't undo the end of a game.
 - **The GM's phone dies.** The GM's screen shows a 4-digit **GM code**. On any other phone, open the game, enter the room code, tap **Game Master's phone died? Take over here**, enter the GM code and tap **Resume as Game Master**. The game carries on from where it was.
-- **Something didn't save.** If a phone loses its connection, it says "Didn't save" and keeps the choice on screen, so the player can tap Confirm again. A night action and its "done" mark always save together.
+- **Someone's phone isn't showing the night.** Their name stays on the GM's "Still waiting on" list. Ask them to reload the page: it goes straight back into the game.
+- **A phone loses its connection.** After a few seconds without hearing from the game, a bar across the top says "📡 Connection lost, so this screen may be out of date". It goes away by itself once the phone reconnects. A phone that wakes up or comes back online checks the game straight away.
+- **Something didn't save.** A save tries three times before giving up, and says "Saving…" if it's slow. If it still fails, the phone says "Didn't save" and keeps the choice on screen, so the player can tap Confirm again. A night action and its "done" mark always save together. Each player's night choice is saved under one key per night, so a choice sent twice still counts once. A phone that has been out of touch checks the night is still on before it saves a choice, so a choice can't be saved for a night that's over.
 
 ## Good to know
 
@@ -162,13 +165,13 @@ To try it locally, open `index.html` in a browser, or serve the folder with any 
 
 1. Run `python serve.py` and open http://localhost:8123/test.html. Opening the file directly won't work, and `serve.py` stops the browser keeping old copies of the files.
 2. Choose how many players you want and tap **New Test Game**. The windows create the room and join it automatically.
-3. Set the roles in the Game Master window and start the game. Play each phone by hand, or use **Random** on one window or **Random Choices for Everyone Waiting** on all of them.
+3. Set the roles in the Game Master window and start the game. Play each phone by hand, or use **Random** on one window or **Random Choices for Everyone Waiting** on all of them. For a player with nothing to choose, these tap **Done for Tonight**.
 
 Windows waiting for a choice have an orange border. Reloading the page returns to the same game. **New Test Game** and **Delete Test Game** remove the test room from the database.
 
 ## How it works
 
 - Plain HTML, CSS and JavaScript in one file, with no framework or dependencies apart from Google Fonts.
-- Game state is stored in the Firebase Realtime Database through its REST API, so no Firebase SDK is needed. Each phone checks the game every 2 seconds and redraws when something changes.
+- Game state is stored in the Firebase Realtime Database through its REST API, so no Firebase SDK is needed. Each phone checks the game every 2 seconds and redraws when something changes. It makes one check at a time, so replies can't arrive out of order. Any request with no answer after 8 seconds counts as failed. A phone shows its own saves straight away, without waiting for the next check.
 - Each phone remembers which game it's in using `localStorage`.
 - All night logic lives in a single function, `resolveNight()`. It drives the GM's live preview, the actual end-of-night result, and the Town Hall script, so all three always agree.
